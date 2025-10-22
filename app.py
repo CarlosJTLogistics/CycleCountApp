@@ -1,8 +1,7 @@
-﻿# v1.4.5
-# - Removed Auto-submit (UI + logic)
-# - Submit Count now uses a safe on_click handler to write submission, update assignment, show feedback,
-#   reset perform_counted_str, and st.rerun() to avoid StreamlitAPIException on Cloud
-# - Keeps 'Submit Assignment' flow, auto-switch to Perform Count, default mapping, haptics, and 20-min lock
+﻿# v1.4.6
+# - Make Perform Count fields read-only: Assignment ID, Assignee, Location, Pallet ID, SKU, LOT Number, Expected QTY
+# - Only Counted QTY and Note remain editable
+# - Preserve submit-assignment flow, safe submit handler, default mapping, haptics, and all prior logic
 import os, time, uuid, re, json
 from datetime import datetime, timedelta
 import pandas as pd
@@ -16,7 +15,7 @@ except Exception:
     _AGGRID_IMPORTED = False
 
 APP_NAME = "Cycle Counting"
-VERSION = "v1.4.5 (remove auto-submit; safe submit handler)"
+VERSION = "v1.4.6 (locked fields in Perform Count)"
 TZ_LABEL = "US/Central"
 LOCK_MINUTES_DEFAULT = 20
 LOCK_MINUTES = int(os.getenv("CC_LOCK_MINUTES", LOCK_MINUTES_DEFAULT))
@@ -321,9 +320,7 @@ _ensure_default("fb_sound", True)
 _ensure_default("fb_vibe", True)
 _ensure_default("auto_focus", True)
 _ensure_default("auto_advance", True)
-# auto_submit removed entirely
 
-# ----- Mapping helpers
 def _get_session_mapping():
     return st.session_state.get("map_defaults", {})
 
@@ -497,13 +494,14 @@ with tabs[1]:
         st.info("No assignments found for you.")
     emit_feedback()
 
-# -------- Perform Count
+# -------- Perform Count (locked fields except Counted QTY and Note)
 with tabs[2]:
     st.subheader("Perform Count")
+
+    # toggles for UX only
     t1, t2 = st.columns(2)
     with t1: st.checkbox("Auto-focus Location", key="auto_focus")
     with t2: st.checkbox("Auto-advance after scan", key="auto_advance")
-
     auto_focus  = st.session_state.get("auto_focus", True)
     auto_advance= st.session_state.get("auto_advance", True)
 
@@ -532,50 +530,40 @@ with tabs[2]:
         _hydrate_from_current(cur)
         if selected_id: st.session_state["_perform_loaded_from"] = selected_id
 
-    assignment_id = st.text_input("Assignment ID", key="perform_assignment_id")
-    assignee      = st.text_input("Assignee", key="perform_assignee")
-
-    def _on_loc_change():
-        st.session_state["_focus_target_label"] = "Scan Pallet ID (optional)" if (st.session_state.get("perform_pallet","") == "") else "Counted QTY"
-        queue_feedback("scan")
-    def _on_pallet_change():
-        st.session_state["_focus_target_label"] = "Counted QTY"; queue_feedback("scan")
+    # --- READ-ONLY FIELDS ---
+    assignment_id = st.text_input("Assignment ID", key="perform_assignment_id", disabled=True)
+    assignee      = st.text_input("Assignee", key="perform_assignee", disabled=True)
 
     c1, c2 = st.columns(2)
     with c1:
-        location = st.text_input("Scan Location", placeholder="Scan or type location", key="perform_location", on_change=_on_loc_change)
+        location = st.text_input("Scan Location", key="perform_location", disabled=True)
     with c2:
-        pallet   = st.text_input("Scan Pallet ID (optional)", placeholder="Scan pallet ID", key="perform_pallet", on_change=_on_pallet_change)
+        pallet   = st.text_input("Scan Pallet ID (optional)", key="perform_pallet", disabled=True)
 
     c3, c4, c5 = st.columns(3)
     with c3:
-        sku = st.text_input("SKU (optional)", key="perform_sku")
+        sku = st.text_input("SKU (optional)", key="perform_sku", disabled=True)
     with c4:
-        lot = st.text_input("LOT Number (optional)", key="perform_lot")
-
-    auto_expected = inv_lookup_expected(location, sku, lot, pallet)
-    if auto_expected is not None and st.session_state.get("perform_expected") != int(auto_expected):
-        st.session_state["perform_expected"] = int(auto_expected)
+        lot = st.text_input("LOT Number (optional)", key="perform_lot", disabled=True)
+    # Expected QTY shown but not editable
     with c5:
-        expected_num = st.number_input("Expected QTY (auto from Inventory if available)", min_value=0, key="perform_expected")
+        expected_num = st.number_input("Expected QTY (from Assignment/Inventory)", min_value=0, key="perform_expected", disabled=True)
 
+    # --- EDITABLE FIELDS ---
     counted_str = st.text_input("Counted QTY", placeholder="Scan/enter count", key="perform_counted_str")
+    note = st.text_input("Note (optional)", key="perform_note")
 
+    # Autofocus: after switch, go to Counted QTY
+    if auto_focus and not st.session_state.get("_did_autofocus"):
+        focus_by_label("Counted QTY"); st.session_state["_did_autofocus"] = True
+
+    # ---- Safe submit handler
     def _parse_count(s):
         s = (s or "").strip()
         if s == "": return None
         if not re.fullmatch(r"\d+", s): return "invalid"
         return int(s)
 
-    note = st.text_input("Note (optional)", key="perform_note")
-
-    if auto_focus and not st.session_state.get("_did_autofocus"):
-        focus_by_label("Scan Location"); st.session_state["_did_autofocus"] = True
-    target = st.session_state.get("_focus_target_label","")
-    if auto_advance and target:
-        focus_by_label(target); st.session_state["_focus_target_label"] = ""
-
-    # ---- Safe submit handler
     def _handle_submit():
         assignment_id = st.session_state.get("perform_assignment_id","")
         assignee      = st.session_state.get("perform_assignee","")
@@ -617,7 +605,6 @@ with tabs[2]:
         }
         safe_append_csv(PATHS["subs"], row, SUBMIT_COLS)
 
-        # Update assignment status to Submitted + clear lock
         dfA2 = load_assignments()
         if assignment_id and not dfA2.empty:
             ix = dfA2.index[dfA2["assignment_id"]==assignment_id]
@@ -627,12 +614,11 @@ with tabs[2]:
                 save_assignments(dfA2)
 
         st.session_state["_submit_msg"] = ("success","Submitted")
-        st.session_state["perform_counted_str"] = ""   # safe here in handler
+        st.session_state["perform_counted_str"] = ""
         queue_feedback("success")
 
     st.button("Submit Count", type="primary", key="perform_submit_btn", use_container_width=True, on_click=_handle_submit)
 
-    # Show submit result and rerun to refresh UI
     msg = st.session_state.pop("_submit_msg", None)
     if msg:
         level, text = msg
