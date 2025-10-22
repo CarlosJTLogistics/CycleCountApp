@@ -1,21 +1,18 @@
-﻿# v1.3.5 (Remove Device ID; Counted QTY starts blank)
-# Keeps: mobile scan UX, sound/vibe default ON, AgGrid selection + rerun, Supervisor Tools (delete), xlrd>=2.0.1, locks, mapping.
-
+﻿# v1.3.6 (Removed Supervisor Tools; Settings now loads)
+# Keeps: mobile scan UX, sound/vibe default ON, AgGrid selection + rerun, xlrd>=2.0.1, locks, mapping.
 import os, time, uuid, re, json
 from datetime import datetime, timedelta
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
-
 # Try to import AgGrid; fall back gracefully if not available
 try:
     from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
     _AGGRID_IMPORTED = True
 except Exception:
     _AGGRID_IMPORTED = False
-
 APP_NAME = "Cycle Counting"
-VERSION = "v1.3.5 (remove Device ID; blank Counted)"
+VERSION = "v1.3.6 (no Supervisor Tools; Settings loads)"
 TZ_LABEL = "US/Central"
 LOCK_MINUTES_DEFAULT = 20
 LOCK_MINUTES = int(os.getenv("CC_LOCK_MINUTES", LOCK_MINUTES_DEFAULT))
@@ -43,9 +40,7 @@ def get_paths():
         "inv_csv": os.path.join(active, "inventory_lookup.csv"),
         "inv_map": os.path.join(active, "inventory_mapping.json"),
     }
-
 PATHS = get_paths()
-
 ASSIGN_COLS = [
     "assignment_id","assigned_by","assignee","location","sku","lot_number","pallet_id",
     "expected_qty","priority","status","created_ts","due_date","notes",
@@ -114,7 +109,6 @@ def load_cached_inventory() -> pd.DataFrame:
 def save_inventory_cache(df: pd.DataFrame):
     df.to_csv(PATHS["inv_csv"], index=False, encoding="utf-8")
     st.session_state["inv_df"] = df
-
 def save_inventory_mapping(mapping: dict):
     with open(PATHS["inv_map"], "w", encoding="utf-8") as f:
         json.dump(mapping, f, indent=2)
@@ -212,26 +206,26 @@ def validate_lock_for_submit(assignment_id: str, user: str) -> (bool, str):
 def inject_mobile_css(scale: float = 1.2):
     base_px = int(16 * scale)
     st.markdown(f"""
-    <style>
-    .stTextInput input, .stNumberInput input {{ font-size: {base_px}px !important; padding: 12px 14px !important; }}
-    .stButton > button {{ font-size: {base_px}px !important; padding: 12px 16px !important; width: 100% !important; }}
-    .stSelectbox, .stMultiselect, .stTextArea textarea {{ font-size: {base_px}px !important; }}
-    </style>
+        <style>
+        .stTextInput input, .stNumberInput input {{ font-size: {base_px}px !important; padding: 12px 14px !important; }}
+        .stButton > button {{ font-size: {base_px}px !important; padding: 12px 16px !important; width: 100% !important; }}
+        .stSelectbox, .stMultiselect, .stTextArea textarea {{ font-size: {base_px}px !important; }}
+        </style>
     """, unsafe_allow_html=True)
 
 def focus_by_label(label_text: str):
     if not label_text: return
     components.html(f"""
-    <script>
-      setTimeout(function(){{
-        const labs=[...parent.document.querySelectorAll('label')];
-        const lab=labs.find(el=>el.innerText.trim()==="{label_text}".trim());
-        if(lab){{
-          const inp=lab.parentElement.querySelector('input,textarea');
-          if(inp){{ inp.focus(); if(inp.select) inp.select(); }}
-        }}
-      }}, 150);
-    </script>
+        <script>
+        setTimeout(function(){{
+            const labs=[...parent.document.querySelectorAll('label')];
+            const lab=labs.find(el=>el.innerText.trim()==="{label_text}".trim());
+            if(lab){{
+                const inp=lab.parentElement.querySelector('input,textarea');
+                if(inp){ inp.focus(); if(inp.select) inp.select(); }
+            }}
+        }}, 150);
+        </script>
     """, height=0)
 
 def queue_feedback(kind: str):
@@ -246,34 +240,34 @@ def emit_feedback():
     vib = "true" if enable_vibe else "false"
     nonce = uuid.uuid4().hex
     components.html(f"""
-    <script>
-    (function(){{
-      const enableSound = {snd}, enableVibe = {vib};
-      function beep(pattern) {{
-        try {{
-          const ctx = new (window.AudioContext || window.webkitAudioContext)();
-          const g = ctx.createGain(); g.gain.value = 0.08; g.connect(ctx.destination);
-          let t = ctx.currentTime;
-          pattern.forEach(p => {{
-            const o = ctx.createOscillator();
-            o.type = p.type || 'sine';
-            o.frequency.setValueAtTime(p.f, t);
-            o.connect(g); o.start(t); o.stop(t + p.d/1000);
-            t += (p.d + (p.gap||40))/1000;
-          }});
-        }} catch(e) {{}}
-      }}
-      function vibrate(seq) {{ try {{ if (navigator.vibrate) navigator.vibrate(seq); }} catch(e) {{}} }}
-      let tone=[], vib=[];
-      switch("{kind}") {{
-        case "scan":    tone=[{{f:1000,d:60}},{{f:1200,d:60}}]; vib=[40,20,40]; break;
-        case "success": tone=[{{f:880,d:120}},{{f:1320,d:120}}]; vib=[70,30,70]; break;
-        case "error":   tone=[{{f:220,d:220,type:'square'}},{{f:180,d:180,type:'square'}}]; vib=[200,100,200]; break;
-      }}
-      if (enableSound && tone.length) beep(tone);
-      if (enableVibe && vib.length) vibrate(vib);
-    }})(); // {nonce}
-    </script>
+        <script>
+        (function(){{
+            const enableSound = {snd}, enableVibe = {vib};
+            function beep(pattern){{
+                try{{
+                    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+                    const g = ctx.createGain(); g.gain.value = 0.08; g.connect(ctx.destination);
+                    let t = ctx.currentTime;
+                    pattern.forEach(p => {{
+                        const o = ctx.createOscillator();
+                        o.type = p.type || 'sine';
+                        o.frequency.setValueAtTime(p.f, t);
+                        o.connect(g); o.start(t); o.stop(t + p.d/1000);
+                        t += (p.d + (p.gap||40))/1000;
+                    }});
+                }} catch(e){{}}
+            }}
+            function vibrate(seq){{ try{{ if (navigator.vibrate) navigator.vibrate(seq); }} catch(e){{}} }}
+            let tone=[], vib=[];
+            switch("{kind}"){{
+                case "scan": tone=[{{f:1000,d:60}},{{f:1200,d:60}}]; vib=[40,20,40]; break;
+                case "success": tone=[{{f:880,d:120}},{{f:1320,d:120}}]; vib=[70,30,70]; break;
+                case "error": tone=[{{f:220,d:220,type:'square'}},{{f:180,d:180,type:'square'}}]; vib=[200,100,200]; break;
+            }}
+            if (enableSound && tone.length) beep(tone);
+            if (enableVibe && vib.length) vibrate(vib);
+        }})(); // {nonce}
+        </script>
     """, height=0)
 
 AGGRID_ENABLED = (os.getenv("AGGRID_ENABLED","1") == "1") and _AGGRID_IMPORTED
@@ -308,22 +302,23 @@ _ensure_default("auto_focus", True)
 _ensure_default("auto_advance", True)
 _ensure_default("auto_submit", False)
 
-top1, top2, top3 = st.columns(3)
-with top1:
+# Top toggles
+_top1, _top2, _top3 = st.columns(3)
+with _top1:
     st.toggle("Mobile Mode (scan gun)", key="mobile_mode", help="Larger touch targets + simplified tables")
-with top2:
+with _top2:
     st.checkbox("Sound feedback", key="fb_sound")
-with top3:
+with _top3:
     st.checkbox("Vibration feedback", key="fb_vibe")
-
 if st.session_state.get("mobile_mode", True):
     inject_mobile_css(scale=1.2)
 
 st.caption(f"Active log dir: {PATHS['root']} · Timezone: {TZ_LABEL} · Lock: {LOCK_MINUTES} min")
 
-tabs = st.tabs(["Assign Counts","My Assignments","Perform Count","Dashboard (Live)","Discrepancies","Supervisor Tools","Settings"])
+# Tabs (Supervisor Tools removed)
+tabs = st.tabs(["Assign Counts","My Assignments","Perform Count","Dashboard (Live)","Discrepancies","Settings"])
 
-# ---------- Assign Counts ----------
+# ---------- Assign Counts
 with tabs[0]:
     st.subheader("Assign Counts")
     c_top1, c_top2 = st.columns(2)
@@ -363,7 +358,7 @@ with tabs[0]:
                         not_in_cache.append(str(loc).strip())
                 is_dup = False
                 if dfA is not None and not dfA.empty:
-                    cand = dfA[(dfA["location"].astype(str).str.strip().str.lower() == str(loc).strip().lower()) & (dfA["status"].isin(["Assigned","In Progress"])) ]
+                    cand = dfA[(dfA["location"].astype(str).str.strip().str.lower() == str(loc).strip().lower()) & (dfA["status"].isin(["Assigned","In Progress"]))] 
                     is_dup = not cand.empty
                 if is_dup: dup_conflicts.append(loc); continue
                 if _any_lock_active_for(loc): locked_conflicts.append(loc); continue
@@ -372,9 +367,7 @@ with tabs[0]:
                     cand_inv = inv_df[inv_df["location"].astype(str).str.strip().str.lower() == str(loc).strip().lower()] if (inv_df is not None and not inv_df.empty) else None
                     if cand_inv is not None and not cand_inv.empty:
                         r = cand_inv.iloc[0]
-                        sku = str(r.get("sku","")).strip()
-                        lot_num = lot_normalize(r.get("lot_number",""))
-                        pallet = str(r.get("pallet_id","")).strip()
+                        sku = str(r.get("sku","")); lot_num = lot_normalize(r.get("lot_number","")); pallet = str(r.get("pallet_id",""))
                         expected_val = r.get("expected_qty","")
                         try: expected = str(int(float(expected_val))) if str(expected_val) != "" else ""
                         except Exception: expected = str(expected_val) if str(expected_val) != "" else ""
@@ -397,7 +390,6 @@ with tabs[0]:
             if dup_conflicts: st.warning(f"Skipped {len(dup_conflicts)} duplicate location(s) already Assigned/In Progress: {', '.join(map(str, dup_conflicts[:10]))}{'…' if len(dup_conflicts)>10 else ''}")
             if locked_conflicts: st.warning(f"Skipped {len(locked_conflicts)} location(s) currently locked by another user.")
             if not_in_cache: st.info(f"{len(not_in_cache)} location(s) not in inventory cache (FYI): {', '.join(map(str, not_in_cache[:10]))}{'…' if len(not_in_cache)>10 else ''}")
-
     st.divider()
     dfA = load_assignments()
     if not dfA.empty:
@@ -407,11 +399,12 @@ with tabs[0]:
                 return f"🔒 {who} until {until}"
             return "Available"
         dfA_disp = dfA.copy(); dfA_disp["lock_info"] = dfA_disp.apply(_lock_info, axis=1)
-        st.write("All Assignments"); show_table(dfA_disp, height=300, key="grid_all_assign")
+        st.write("All Assignments")
+        show_table(dfA_disp, height=300, key="grid_all_assign")
     else:
         st.info("No assignments yet.")
 
-# ---------- My Assignments ----------
+# ---------- My Assignments
 with tabs[1]:
     st.subheader("My Assignments")
     me = st.text_input("I am (name)", key="me_name", value=st.session_state.get("assignee",""))
@@ -434,7 +427,6 @@ with tabs[1]:
             mine_disp["lock_info"] = mine_disp.apply(_lock_info2, axis=1)
             res = show_table(mine_disp, height=300, key="grid_my_assign", selectable=True, selection_mode="single")
             sel = res.get("selected_rows", [])
-            # Normalize selection (DataFrame vs list) and act
             if isinstance(sel, pd.DataFrame):
                 sel_records = sel.to_dict(orient="records")
             elif isinstance(sel, list):
@@ -450,7 +442,6 @@ with tabs[1]:
                 st.success("Assignment loaded into Perform Count."); queue_feedback("success")
                 st.rerun()
         else:
-            # Fallback selector when AgGrid isn't available
             opts = []
             for _, r in mine.iterrows():
                 label = f"{r.get('assignment_id','')} — {r.get('location','')} — {r.get('status','')}"
@@ -470,23 +461,19 @@ with tabs[1]:
         st.info("No assignments found for you.")
     emit_feedback()
 
-# ---------- Perform Count ----------
+# ---------- Perform Count
 with tabs[2]:
     st.subheader("Perform Count")
-
     t1, t2, t3 = st.columns(3)
     with t1: st.checkbox("Auto-focus Location", key="auto_focus")
     with t2: st.checkbox("Auto-advance after scan", key="auto_advance")
     with t3: st.checkbox("Auto-submit after Counted", key="auto_submit")
-
-    auto_focus  = st.session_state.get("auto_focus", True)
+    auto_focus = st.session_state.get("auto_focus", True)
     auto_advance= st.session_state.get("auto_advance", True)
     auto_submit = st.session_state.get("auto_submit", False)
-
     cur = st.session_state.get("current_assignment", {})
     assignment_id = st.text_input("Assignment ID", value=cur.get("assignment_id",""), key="perform_assignment_id")
     assignee = st.text_input("Assignee", value=cur.get("assignee", st.session_state.get("me_name","")), key="perform_assignee")
-
     def _on_loc_change():
         st.session_state["_focus_target_label"] = "Scan Pallet ID (optional)" if (st.session_state.get("perform_pallet","")== "") else "Counted QTY"
         queue_feedback("scan")
@@ -494,13 +481,11 @@ with tabs[2]:
         st.session_state["_focus_target_label"] = "Counted QTY"; queue_feedback("scan")
     def _on_count_change():
         st.session_state["_auto_submit_try"] = True
-
     c1, c2 = st.columns(2)
     with c1:
         location = st.text_input("Scan Location", value=cur.get("location",""), placeholder="Scan or type location", key="perform_location", on_change=_on_loc_change)
     with c2:
         pallet = st.text_input("Scan Pallet ID (optional)", value=cur.get("pallet_id",""), placeholder="Scan pallet ID", key="perform_pallet", on_change=_on_pallet_change)
-
     c3, c4, c5 = st.columns(3)
     with c3:
         sku = st.text_input("SKU (optional)", value=cur.get("sku",""), key="perform_sku")
@@ -512,25 +497,19 @@ with tabs[2]:
     default_expected = auto_expected if auto_expected is not None else (try_cur_exp if try_cur_exp is not None else 0)
     with c5:
         expected_num = st.number_input("Expected QTY (auto from Inventory if available)", min_value=0, value=int(default_expected), key="perform_expected")
-
-    # Counted QTY now starts blank using a text input (numeric validation + on_change)
     counted_str = st.text_input("Counted QTY", value=st.session_state.get("perform_counted_str",""), placeholder="Scan/enter count", key="perform_counted_str", on_change=_on_count_change)
     def _parse_count(s):
         s = (s or "").strip()
         if s == "": return None
-        if not re.fullmatch(r"\d+", s): return "invalid"
+        if not re.fullmatch(r"\\d+", s): return "invalid"
         return int(s)
     counted_val = _parse_count(counted_str)
-
     note = st.text_input("Note (optional)", key="perform_note")
-
-    # Auto-focus flow
     if auto_focus and not st.session_state.get("_did_autofocus"):
         focus_by_label("Scan Location"); st.session_state["_did_autofocus"] = True
     target = st.session_state.get("_focus_target_label","")
     if auto_advance and target:
         focus_by_label(target); st.session_state["_focus_target_label"] = ""
-
     if assignment_id and assignee and st.button("Start / Renew 20-min Lock", use_container_width=True, key="perform_lock_btn"):
         try:
             ok, msg = start_or_renew_lock(assignment_id, assignee)
@@ -538,8 +517,6 @@ with tabs[2]:
             if ok: queue_feedback("success")
         except Exception as e:
             st.warning(f"Lock error: {e}"); queue_feedback("error")
-
-    # Submit button with validation for blank/invalid counted
     if st.button("Submit Count", type="primary", key="perform_submit_btn", use_container_width=True):
         if not assignee or not location:
             st.warning("Assignee and Location are required."); queue_feedback("error")
@@ -565,7 +542,7 @@ with tabs[2]:
                     "variance": variance if variance != "" else "",
                     "variance_flag": flag,
                     "timestamp": now_str(),
-                    "device_id": "",  # kept for schema; UI removed
+                    "device_id": "",
                     "note": (note or "").strip(),
                 }
                 safe_append_csv(PATHS["subs"], row, SUBMIT_COLS)
@@ -577,10 +554,7 @@ with tabs[2]:
                         dfA2.loc[ix, ["lock_owner","lock_start_ts","lock_expires_ts"]] = ["","",""]
                         save_assignments(dfA2)
                 st.success("Submitted"); queue_feedback("success")
-                # clear counted field after submit
                 st.session_state["perform_counted_str"] = ""
-
-    # Auto-submit path when enabled and counted changed
     if auto_submit and st.session_state.get("_auto_submit_try", False):
         st.session_state["_auto_submit_try"] = False
         if assignee and location and (counted_val not in (None, "invalid")):
@@ -616,10 +590,9 @@ with tabs[2]:
                 st.session_state["perform_counted_str"] = ""
             else:
                 st.error(why); queue_feedback("error")
-
     emit_feedback()
 
-# ---------- Dashboard (Live) ----------
+# ---------- Dashboard (Live)
 with tabs[3]:
     st.subheader("Dashboard (Live)")
     subs_path = PATHS["subs"]
@@ -644,7 +617,7 @@ with tabs[3]:
     if os.path.exists(subs_path) and os.path.getmtime(subs_path) != last_mod:
         st.rerun()
 
-# ---------- Discrepancies ----------
+# ---------- Discrepancies
 with tabs[4]:
     st.subheader("Discrepancies")
     dfS = load_submissions()
@@ -657,87 +630,16 @@ with tabs[4]:
     show_table(ex_disp, height=300, key="grid_exceptions", numeric_cols=["variance"])
     st.download_button("Export Exceptions CSV", data=ex.to_csv(index=False), file_name="cyclecount_exceptions.csv", mime="text/csv", key="disc_export_btn")
 
-# ---------- Supervisor Tools ----------
-def delete_assignments(assign_ids, deleted_by, reason):
-    if not assign_ids: return 0
-    df = load_assignments()
-    if df.empty: return 0
-    mask = df["assignment_id"].isin(assign_ids)
-    sel = df[mask].copy()
-    if sel.empty: return 0
-    for _, r in sel.iterrows():
-        row = r.to_dict()
-        row.update({"deleted_by": (deleted_by or "").strip(), "deleted_ts": now_str(), "reason": (reason or "").strip()})
-        cols = ASSIGN_COLS + ["deleted_by","deleted_ts","reason"]
-        safe_append_csv(PATHS["assign_deleted"], row, cols)
-    df2 = df[~mask].copy()
-    save_assignments(df2)
-    return int(len(sel))
-
+# ---------- Settings (no st.stop anywhere)
 with tabs[5]:
-    st.subheader("Supervisor Tools")
-    pin_cfg = st.secrets.get("SUPERVISOR_PIN", os.getenv("SUPERVISOR_PIN",""))
-    if not pin_cfg:
-        st.info("Set SUPERVISOR_PIN in Streamlit Secrets or environment to enable deletion tools.")
-    pin = st.text_input("Supervisor PIN", type="password", key="sup_pin")
-    unlocked = (pin_cfg and pin == pin_cfg)
-    if not pin_cfg:
-        st.stop()
-    if not unlocked:
-        st.warning("Enter valid PIN to unlock supervisor actions.")
-        st.stop()
-
-    dfA = load_assignments()
-    if dfA.empty:
-        st.info("No assignments to manage.")
-    else:
-        c1, c2 = st.columns([1,1])
-        with c1:
-            assignee_filter = st.text_input("Filter by Assignee (optional)", key="sup_flt_assignee")
-        with c2:
-            status_filter = st.multiselect("Status filter", ["Assigned","In Progress","Submitted"], default=["Assigned","In Progress","Submitted"], key="sup_flt_status")
-        view = dfA.copy()
-        if assignee_filter:
-            view = view[view["assignee"].str.lower().str.contains(assignee_filter.lower())]
-        if status_filter:
-            view = view[view["status"].isin(status_filter)]
-        st.write(f"Matching assignments: {len(view)}")
-        selection_ids = []
-
-        if AGGRID_ENABLED:
-            gob = GridOptionsBuilder.from_dataframe(view)
-            gob.configure_default_column(resizable=True, filter=True, sortable=True)
-            gob.configure_selection("multiple", use_checkbox=True)
-            grid = AgGrid(view, gridOptions=gob.build(), update_mode=GridUpdateMode.SELECTION_CHANGED, height=320, key="sup_assign_grid")
-            rows = grid.get("selected_rows", [])
-            if isinstance(rows, pd.DataFrame):
-                rows = rows.to_dict(orient="records")
-            selection_ids = [r.get("assignment_id","") for r in (rows or []) if r.get("assignment_id","")]
-        else:
-            options = view["assignment_id"].tolist()
-            selection_ids = st.multiselect("Select assignment IDs to delete", options, key="sup_sel_ids")
-
-        reason = st.text_input("Reason (required for audit)", key="sup_reason")
-        deleted_by = st.text_input("Deleted by (name)", value=st.session_state.get("assigned_by",""), key="sup_deleted_by")
-        confirm = st.checkbox("I understand this will permanently remove the selected assignment(s) from the active list.", key="sup_confirm")
-        btn_disabled = not (selection_ids and confirm and reason and deleted_by)
-
-        if st.button("Delete selected assignments", type="primary", disabled=btn_disabled, key="sup_delete_btn", use_container_width=True):
-            n = delete_assignments(selection_ids, deleted_by, reason)
-            if n > 0:
-                st.success(f"Deleted {n} assignment(s). They were logged to counts_assignments_deleted.csv for audit.")
-                queue_feedback("success")
-                st.rerun()
-            else:
-                st.warning("Nothing deleted. Check your selection.")
-                queue_feedback("error")
-    emit_feedback()
-
-# ---------- Settings ----------
-with tabs[6]:
     st.subheader("Settings")
     st.write("Environment variables (optional):")
-    st.code("CYCLE_COUNT_LOG_DIR=<shared path>\nBIN_HELPER_LOG_DIR=<fallback if set>\nCC_LOCK_MINUTES=<default 20>\nAGGRID_ENABLED=<1 or 0>\nSUPERVISOR_PIN=<set in Streamlit secrets>", language="bash")
+    st.code("""CYCLE_COUNT_LOG_DIR=<shared path>
+BIN_HELPER_LOG_DIR=<fallback if set>
+CC_LOCK_MINUTES=<default 20>
+AGGRID_ENABLED=<1 or 0>
+SUPERVISOR_PIN=<(unused) was for removed tools>
+""", language="bash")
     st.caption("Tip: point CYCLE_COUNT_LOG_DIR to your OneDrive JT Logistics folder so counters and your dashboard use the same files.")
     st.write("Active paths:", PATHS)
     st.divider()
@@ -776,4 +678,3 @@ with tabs[6]:
                 st.success(f"Saved mapping and cached {len(norm):,} rows."); st.rerun()
         except Exception as e:
             st.warning(f"Excel load error: {e}")
-
