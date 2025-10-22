@@ -232,20 +232,20 @@ with tabs[0]:
     with c_top1:
         assigned_by = st.text_input("Assigned by", value=st.session_state.get("assigned_by",""), key="assign_assigned_by")
     with c_top2:
-        assignee = st.text_input("Assign to (name)", value=st.session_state.get("assignee",""), key="assign_assignee")
+        assignee = st.text_input("Assign to (name, key="assign_assigned_by")", value=st.session_state.get("assignee",""))
 
     c1,c2,c3 = st.columns(3)
     with c1: location = st.text_input("Location (scan or type)", key="assign_location")
-    with c2: sku = st.text_input("SKU (optional"))
-    with c3: lot = st.text_input("LOT Number (optional)", value="", help="Digits only; will be normalized", key="assign_lot")
+    with c2: sku = st.text_input("SKU (optional, key="assign_location")")
+    with c3: lot = st.text_input("LOT Number (optional)", value="", help="Digits only; will be normalized")
 
     c4,c5,c6 = st.columns(3, key="assign_lot")
-    with c4: pallet = st.text_input("Pallet ID (optional)", key="assign_pallet")
-    with c5: expected = st.number_input("Expected QTY (optional"), min_value=0, value=0)
-    with c6: priority = st.selectbox("Priority", ["Normal","High","Low"], index=0, key="assign_priority")
+    with c4: pallet = st.text_input("Pallet ID (optional)")
+    with c5: expected = st.number_input("Expected QTY (optional, key="assign_pallet")", min_value=0, value=0)
+    with c6: priority = st.selectbox("Priority", ["Normal","High","Low"], index=0)
 
-    due_date = st.date_input("Due date", value=date.today(), key="assign_due_date")
-    notes = st.text_area("Notes (optional)", height=80, key="assign_notes")
+    due_date = st.date_input("Due date", value=date.today())
+    notes = st.text_area("Notes (optional)", height=80)
 
     if st.button("Create Assignment", type="primary"):
         if not assigned_by or not assignee or not location:
@@ -341,23 +341,23 @@ with tabs[1]:
 with tabs[2]:
     st.subheader("Perform Count")
     cur = st.session_state.get("current_assignment", {})
-    assignment_id = st.text_input("Assignment ID", value=cur.get("assignment_id",""), key="perform_assignment_id")
+    assignment_id = st.text_input("Assignment ID", value=cur.get("assignment_id",""))
     assignee = st.text_input("Assignee", value=cur.get("assignee", st.session_state.get("me_name","", key="perform_assignment_id")))
     c1,c2 = st.columns(2)
-    with c1: location = st.text_input("Scan Location", value=cur.get("location",""), placeholder="Scan now", key="perform_location")
-    with c2: pallet = st.text_input("Scan Pallet ID (optional"), value=cur.get("pallet_id",""))
+    with c1: location = st.text_input("Scan Location", value=cur.get("location",""), placeholder="Scan now")
+    with c2: pallet = st.text_input("Scan Pallet ID (optional, key="perform_location")", value=cur.get("pallet_id",""))
     c3,c4,c5 = st.columns(3)
     with c3: sku = st.text_input("SKU (optional)", value=cur.get("sku","", key="assign_sku"))
-    with c4: lot = st.text_input("LOT Number (optional)", value=cur.get("lot_number",""), key="perform_lot")
+    with c4: lot = st.text_input("LOT Number (optional)", value=cur.get("lot_number",""))
     # Autofill expected from Inventory cache if available, else from assignment
     auto_expected = inv_lookup_expected(location, sku, lot, pallet, key="perform_lot")
     cur_exp = cur.get("expected_qty","")
     try_cur_exp = int(cur_exp) if str(cur_exp).isdigit() else None
     default_expected = auto_expected if auto_expected is not None else (try_cur_exp if try_cur_exp is not None else 0)
-    with c5: expected_num = st.number_input("Expected QTY (auto from Inventory if available)", min_value=0, value=int(default_expected), key="perform_expected")
-    counted = st.number_input("Counted QTY", min_value=0, step=1, key="perform_counted")
-    device_id = st.text_input("Device ID (optional)", value=os.getenv("DEVICE_ID",""), key="perform_device_id")
-    note = st.text_input("Note (optional"))
+    with c5: expected_num = st.number_input("Expected QTY (auto from Inventory if available)", min_value=0, value=int(default_expected))
+    counted = st.number_input("Counted QTY", min_value=0, step=1)
+    device_id = st.text_input("Device ID (optional)", value=os.getenv("DEVICE_ID",""))
+    note = st.text_input("Note (optional, key="perform_device_id")")
 
     # Quick lock control
     if assignment_id and assignee and st.button("Start / Renew 20-min Lock", use_container_width=True):
@@ -492,5 +492,4 @@ with tabs[5]:
                 st.rerun()
         except Exception as e:
             st.warning(f"Excel load error: {e}")
-
 
