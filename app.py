@@ -388,7 +388,6 @@ with tabs[0]:
 
             # Webhook summary payload (best-effort; non-blocking)
             try:
-,
                     "assignee": assignee.strip(),
                     "notes": notes.strip(),
                     "locations_submitted": loc_merge,
