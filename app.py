@@ -14,10 +14,10 @@ LOCK_MINUTES = int(os.getenv("CC_LOCK_MINUTES", LOCK_MINUTES_DEFAULT))
 # ========= Core utils =========
 TS_FMT = "%m/%d/%Y %I:%M:%S %p"
 
-def lot_normalize(x:str)->str:
-    if x is None or (isinstance(x,float) and pd.isna(x)): return ""
-    s = re.sub(r"\D","", str(x))
-    s = re.sub(r"^0+","", s)
+def lot_normalize(x: str) -> str:
+    if x is None or (isinstance(x, float) and pd.isna(x)): return ""
+    s = re.sub(r"\D", "", str(x))
+    s = re.sub(r"^0+", "", s)
     return s or ""
 
 def ensure_dirs(paths):
@@ -50,7 +50,7 @@ SUBMIT_COLS = [
     "counted_qty","expected_qty","variance","variance_flag","timestamp","device_id","note"
 ]
 
-def safe_append_csv(path, row:dict, columns:list):
+def safe_append_csv(path, row: dict, columns: list):
     exists = os.path.exists(path)
     df = pd.DataFrame([row], columns=columns)
     tmp = path + ".tmp"
@@ -73,14 +73,10 @@ def read_csv_locked(path, columns=None):
     return pd.DataFrame(columns=columns or [])
 
 def now_str(): return datetime.now().strftime(TS_FMT)
-
 def mk_id(prefix): return f"{prefix}-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6].upper()}"
-
-def parse_ts(s:str):
-    try:
-        return datetime.strptime(s, TS_FMT)
-    except Exception:
-        return None
+def parse_ts(s: str):
+    try: return datetime.strptime(s, TS_FMT)
+    except Exception: return None
 
 # ========= Data access =========
 def load_assignments():
@@ -91,7 +87,6 @@ def load_assignments():
     return df
 
 def save_assignments(df: pd.DataFrame):
-    # Keep only defined columns (preserve order)
     for c in ASSIGN_COLS:
         if c not in df.columns: df[c] = ""
     df[ASSIGN_COLS].to_csv(PATHS["assign"], index=False, encoding="utf-8")
@@ -128,37 +123,32 @@ def load_inventory_mapping() -> dict:
     return {}
 
 def normalize_inventory_df(df: pd.DataFrame, mapping: dict) -> pd.DataFrame:
-    # Map selected columns into canonical names; missing -> blank
     out = pd.DataFrame()
-    out["location"]   = df[mapping.get("location","")].astype(str) if mapping.get("location") in df.columns else ""
-    out["sku"]        = df[mapping.get("sku","")].astype(str) if mapping.get("sku") in df.columns else ""
+    out["location"] = df[mapping.get("location","")].astype(str) if mapping.get("location","") in df.columns else ""
+    out["sku"] = df[mapping.get("sku","")].astype(str) if mapping.get("sku","") in df.columns else ""
     lot_col = mapping.get("lot_number","")
     out["lot_number"] = df[lot_col].astype(str).map(lot_normalize) if lot_col in df.columns else ""
-    out["pallet_id"]  = df[mapping.get("pallet_id","")].astype(str) if mapping.get("pallet_id") in df.columns else ""
+    out["pallet_id"] = df[mapping.get("pallet_id","")].astype(str) if mapping.get("pallet_id","") in df.columns else ""
     qty_col = mapping.get("expected_qty","")
     if qty_col in df.columns:
-        # Force numeric, fill non-numeric as blank
         q = pd.to_numeric(df[qty_col], errors="coerce").fillna("").astype(str)
         out["expected_qty"] = q
     else:
         out["expected_qty"] = ""
-    # Trim whitespace
     for c in ["location","sku","pallet_id"]:
-        out[c] = out[c].str.strip()
+        out[c] = out[c].astype(str).str.strip()
     return out.fillna("")
 
-def inv_lookup_expected(location:str, sku:str="", lot:str="", pallet_id:str=""):
+def inv_lookup_expected(location: str, sku: str="", lot: str="", pallet_id: str=""):
     inv = load_cached_inventory()
     if inv.empty or not isinstance(inv, pd.DataFrame) or "expected_qty" not in inv.columns:
         return None
-    # Prepare normalized keys
     loc = (location or "").strip()
     sku = (sku or "").strip()
     pal = (pallet_id or "").strip()
     lotN = lot_normalize(lot)
     if loc == "" and pal == "" and sku == "" and lotN == "":
         return None
-    # Priority filters: more specific to less
     candidates = [
         ({"location":loc, "pallet_id":pal, "lot_number":lotN, "sku":sku}, True),
         ({"location":loc, "pallet_id":pal, "lot_number":lotN}, True),
@@ -176,7 +166,6 @@ def inv_lookup_expected(location:str, sku:str="", lot:str="", pallet_id:str=""):
             if v != "":
                 tmp = tmp[tmp[k].astype(str).str.strip().str.lower() == str(v).strip().lower()]
         if not tmp.empty:
-            # Take the first numeric expected_qty
             for val in tmp["expected_qty"].tolist():
                 try:
                     n = int(float(val))
@@ -190,7 +179,7 @@ def lock_active(row: pd.Series) -> bool:
     exp = parse_ts(row.get("lock_expires_ts",""))
     return bool(exp and exp > datetime.now())
 
-def lock_owned_by(row: pd.Series, user:str) -> bool:
+def lock_owned_by(row: pd.Series, user: str) -> bool:
     return (row.get("lock_owner","").strip().lower() == (user or "").strip().lower())
 
 def start_or_renew_lock(assignment_id: str, user: str):
@@ -225,29 +214,35 @@ st.caption(f"Active log dir: {PATHS['root']} · Timezone: {TZ_LABEL} · Lock: {L
 
 tabs = st.tabs(["Assign Counts","My Assignments","Perform Count","Dashboard (Live)","Discrepancies","Settings"])
 
-# ------------- Assign Counts -------------
+# ---------- Assign Counts ----------
 with tabs[0]:
     st.subheader("Assign Counts")
     c_top1, c_top2 = st.columns(2)
     with c_top1:
         assigned_by = st.text_input("Assigned by", value=st.session_state.get("assigned_by",""), key="assign_assigned_by")
     with c_top2:
-        assignee = st.text_input("Assign to (name, key="assign_assigned_by")", value=st.session_state.get("assignee",""))
+        assignee = st.text_input("Assign to (name)", value=st.session_state.get("assignee",""), key="assign_assignee")
 
     c1,c2,c3 = st.columns(3)
-    with c1: location = st.text_input("Location (scan or type)", key="assign_location")
-    with c2: sku = st.text_input("SKU (optional, key="assign_location")")
-    with c3: lot = st.text_input("LOT Number (optional)", value="", help="Digits only; will be normalized")
+    with c1:
+        location = st.text_input("Location (scan or type)", key="assign_location")
+    with c2:
+        sku = st.text_input("SKU (optional)", key="assign_sku")
+    with c3:
+        lot = st.text_input("LOT Number (optional)", value="", help="Digits only; will be normalized", key="assign_lot")
 
-    c4,c5,c6 = st.columns(3, key="assign_lot")
-    with c4: pallet = st.text_input("Pallet ID (optional)")
-    with c5: expected = st.number_input("Expected QTY (optional, key="assign_pallet")", min_value=0, value=0)
-    with c6: priority = st.selectbox("Priority", ["Normal","High","Low"], index=0)
+    c4,c5,c6 = st.columns(3)
+    with c4:
+        pallet = st.text_input("Pallet ID (optional)", key="assign_pallet")
+    with c5:
+        expected = st.number_input("Expected QTY (optional)", min_value=0, value=0, key="assign_expected")
+    with c6:
+        priority = st.selectbox("Priority", ["Normal","High","Low"], index=0, key="assign_priority")
 
-    due_date = st.date_input("Due date", value=date.today())
-    notes = st.text_area("Notes (optional)", height=80)
+    due_date = st.date_input("Due date", value=date.today(), key="assign_due_date")
+    notes = st.text_area("Notes (optional)", height=80, key="assign_notes")
 
-    if st.button("Create Assignment", type="primary"):
+    if st.button("Create Assignment", type="primary", key="assign_create_btn"):
         if not assigned_by or not assignee or not location:
             st.warning("Assigned by, Assignee, and Location are required.")
         else:
@@ -270,30 +265,30 @@ with tabs[0]:
                 "lock_expires_ts": "",
             }
             safe_append_csv(PATHS["assign"], row, ASSIGN_COLS)
-            st.session_state["assigned_by"]=assigned_by; st.session_state["assignee"]=assignee
+            st.session_state["assigned_by"]=assigned_by
+            st.session_state["assignee"]=assignee
             st.success(f"Assignment created for {assignee} at {location}")
 
     st.divider()
     dfA = load_assignments()
     if not dfA.empty:
-        # Add helpful display col
-        def lock_info(r):
+        def _lock_info(r):
             if lock_active(r):
                 who = r.get("lock_owner","?")
                 until = r.get("lock_expires_ts","")
                 return f"🔒 {who} until {until}"
             return "Available"
         dfA_disp = dfA.copy()
-        dfA_disp["lock_info"] = dfA_disp.apply(lock_info, axis=1)
+        dfA_disp["lock_info"] = dfA_disp.apply(_lock_info, axis=1)
         st.write("All Assignments")
         gob = GridOptionsBuilder.from_dataframe(dfA_disp)
         gob.configure_default_column(resizable=True, filter=True, sortable=True)
         gob.configure_selection("single")
-        AgGrid(dfA_disp, gridOptions=gob.build(), update_mode=GridUpdateMode.NO_UPDATE, height=300)
+        AgGrid(dfA_disp, gridOptions=gob.build(), update_mode=GridUpdateMode.NO_UPDATE, height=300, key="grid_all_assign")
     else:
         st.info("No assignments yet.")
 
-# ------------- My Assignments -------------
+# ---------- My Assignments ----------
 with tabs[1]:
     st.subheader("My Assignments")
     me = st.text_input("I am (name)", key="me_name", value=st.session_state.get("assignee",""))
@@ -308,8 +303,7 @@ with tabs[1]:
 
     st.write("Your Assignments")
     if not mine.empty:
-        # Display lock info and allow Start/Renew
-        def lock_info(r):
+        def _lock_info2(r):
             if lock_active(r):
                 who = r.get("lock_owner","?")
                 until = r.get("lock_expires_ts","")
@@ -317,58 +311,63 @@ with tabs[1]:
                 return f"🔒 {who} until {until}"
             return "Available"
         mine_disp = mine.copy()
-        mine_disp["lock_info"] = mine_disp.apply(lock_info, axis=1)
+        mine_disp["lock_info"] = mine_disp.apply(_lock_info2, axis=1)
         gob = GridOptionsBuilder.from_dataframe(mine_disp)
         gob.configure_default_column(resizable=True, filter=True, sortable=True)
         gob.configure_column("location", pinned="left")
-        grid = AgGrid(mine_disp, gridOptions=gob.build(), update_mode=GridUpdateMode.SELECTION_CHANGED, height=280)
+        grid = AgGrid(mine_disp, gridOptions=gob.build(), update_mode=GridUpdateMode.SELECTION_CHANGED, height=280, key="grid_my_assign")
         sel = grid["selected_rows"]
         if sel:
             selected = sel[0]
             st.session_state["current_assignment"] = selected
             c1, c2 = st.columns(2)
             with c1:
-                if st.button("Start / Renew 20-min Lock", type="primary", use_container_width=True):
+                if st.button("Start / Renew 20-min Lock", type="primary", use_container_width=True, key="my_lock_btn"):
                     ok, msg = start_or_renew_lock(selected["assignment_id"], me)
-                    if ok: st.success(msg); st.rerun()
-                    else: st.warning(msg)
+                    if ok:
+                        st.success(msg); st.rerun()
+                    else:
+                        st.warning(msg)
             with c2:
                 st.info(selected.get("lock_info",""))
     else:
         st.info("No assignments found for you.")
 
-# ------------- Perform Count -------------
+# ---------- Perform Count ----------
 with tabs[2]:
     st.subheader("Perform Count")
     cur = st.session_state.get("current_assignment", {})
-    assignment_id = st.text_input("Assignment ID", value=cur.get("assignment_id",""))
-    assignee = st.text_input("Assignee", value=cur.get("assignee", st.session_state.get("me_name","", key="perform_assignment_id")))
+    assignment_id = st.text_input("Assignment ID", value=cur.get("assignment_id",""), key="perform_assignment_id")
+    assignee = st.text_input("Assignee", value=cur.get("assignee", st.session_state.get("me_name","")), key="perform_assignee")
     c1,c2 = st.columns(2)
-    with c1: location = st.text_input("Scan Location", value=cur.get("location",""), placeholder="Scan now")
-    with c2: pallet = st.text_input("Scan Pallet ID (optional, key="perform_location")", value=cur.get("pallet_id",""))
+    with c1:
+        location = st.text_input("Scan Location", value=cur.get("location",""), placeholder="Scan now", key="perform_location")
+    with c2:
+        pallet = st.text_input("Scan Pallet ID (optional)", value=cur.get("pallet_id",""), key="perform_pallet")
     c3,c4,c5 = st.columns(3)
-    with c3: sku = st.text_input("SKU (optional)", value=cur.get("sku","", key="assign_sku"))
-    with c4: lot = st.text_input("LOT Number (optional)", value=cur.get("lot_number",""))
-    # Autofill expected from Inventory cache if available, else from assignment
-    auto_expected = inv_lookup_expected(location, sku, lot, pallet, key="perform_lot")
+    with c3:
+        sku = st.text_input("SKU (optional)", value=cur.get("sku",""), key="perform_sku")
+    with c4:
+        lot = st.text_input("LOT Number (optional)", value=cur.get("lot_number",""), key="perform_lot")
+    # Expected from inventory cache if available, else from assignment
+    auto_expected = inv_lookup_expected(location, sku, lot, pallet)
     cur_exp = cur.get("expected_qty","")
     try_cur_exp = int(cur_exp) if str(cur_exp).isdigit() else None
     default_expected = auto_expected if auto_expected is not None else (try_cur_exp if try_cur_exp is not None else 0)
-    with c5: expected_num = st.number_input("Expected QTY (auto from Inventory if available)", min_value=0, value=int(default_expected))
-    counted = st.number_input("Counted QTY", min_value=0, step=1)
-    device_id = st.text_input("Device ID (optional)", value=os.getenv("DEVICE_ID",""))
-    note = st.text_input("Note (optional, key="perform_device_id")")
+    with c5:
+        expected_num = st.number_input("Expected QTY (auto from Inventory if available)", min_value=0, value=int(default_expected), key="perform_expected")
+    counted = st.number_input("Counted QTY", min_value=0, step=1, key="perform_counted")
+    device_id = st.text_input("Device ID (optional)", value=os.getenv("DEVICE_ID",""), key="perform_device_id")
+    note = st.text_input("Note (optional)", key="perform_note")
 
-    # Quick lock control
-    if assignment_id and assignee and st.button("Start / Renew 20-min Lock", use_container_width=True):
+    if assignment_id and assignee and st.button("Start / Renew 20-min Lock", use_container_width=True, key="perform_lock_btn"):
         ok, msg = start_or_renew_lock(assignment_id, assignee)
         st.success(msg) if ok else st.warning(msg)
 
-    if st.button("Submit Count", type="primary"):
+    if st.button("Submit Count", type="primary", key="perform_submit_btn"):
         if not assignee or not location:
             st.warning("Assignee and Location are required.")
         else:
-            # Validate lock
             ok, why = validate_lock_for_submit(assignment_id, assignee)
             if not ok:
                 st.error(why)
@@ -392,48 +391,40 @@ with tabs[2]:
                     "note": note.strip(),
                 }
                 safe_append_csv(PATHS["subs"], row, SUBMIT_COLS)
-
-                # Mark assignment as Submitted (if known)
                 dfA = load_assignments()
                 if assignment_id and not dfA.empty:
                     ix = dfA.index[dfA["assignment_id"]==assignment_id]
                     if len(ix)>0:
                         dfA.loc[ix, "status"] = "Submitted"
-                        # Clear lock on submit
                         dfA.loc[ix, ["lock_owner","lock_start_ts","lock_expires_ts"]] = ["","",""]
                         save_assignments(dfA)
                 st.success("Submitted")
 
-# ------------- Dashboard (Live) -------------
+# ---------- Dashboard (Live) ----------
 with tabs[3]:
     st.subheader("Dashboard (Live)")
     subs_path = PATHS["subs"]
-    refresh_sec = st.slider("Auto-refresh every (seconds)", 2, 30, 5)
+    refresh_sec = st.slider("Auto-refresh every (seconds)", 2, 30, 5, key="dash_refresh")
     st.caption(f"Submissions file: {subs_path}")
     dfS = load_submissions()
-
-    # KPIs (Today)
     today_str = datetime.now().strftime("%m/%d/%Y")
     today_df = dfS[dfS["timestamp"].str.contains(today_str)] if not dfS.empty else dfS
     c1,c2,c3,c4 = st.columns(4)
     c1.metric("Counts Today", int(len(today_df)))
-    c2.metric("Over", int((today_df["variance_flag"]=="Over").sum()))
-    c3.metric("Short", int((today_df["variance_flag"]=="Short").sum()))
-    c4.metric("Match", int((today_df["variance_flag"]=="Match").sum()))
-
+    c2.metric("Over", int((today_df["variance_flag"]=="Over").sum()) if not today_df.empty else 0)
+    c3.metric("Short", int((today_df["variance_flag"]=="Short").sum()) if not today_df.empty else 0)
+    c4.metric("Match", int((today_df["variance_flag"]=="Match").sum()) if not today_df.empty else 0)
     st.write("Latest Submissions")
     gob = GridOptionsBuilder.from_dataframe(dfS)
     gob.configure_default_column(resizable=True, filter=True, sortable=True)
     gob.configure_column("variance", type=["numericColumn"])
-    AgGrid(dfS, gridOptions=gob.build(), update_mode=GridUpdateMode.NO_UPDATE, height=320)
-
-    # File-change-triggered refresh
+    AgGrid(dfS, gridOptions=gob.build(), update_mode=GridUpdateMode.NO_UPDATE, height=320, key="grid_submissions")
     last_mod = os.path.getmtime(subs_path) if os.path.exists(subs_path) else 0
     time.sleep(refresh_sec)
     if os.path.exists(subs_path) and os.path.getmtime(subs_path) != last_mod:
         st.rerun()
 
-# ------------- Discrepancies -------------
+# ---------- Discrepancies ----------
 with tabs[4]:
     st.subheader("Discrepancies")
     dfS = load_submissions()
@@ -441,10 +432,10 @@ with tabs[4]:
     st.write("Exceptions")
     gob = GridOptionsBuilder.from_dataframe(ex)
     gob.configure_default_column(resizable=True, filter=True, sortable=True)
-    AgGrid(ex, gridOptions=gob.build(), update_mode=GridUpdateMode.NO_UPDATE, height=300)
-    st.download_button("Export Exceptions CSV", data=ex.to_csv(index=False), file_name="cyclecount_exceptions.csv", mime="text/csv")
+    AgGrid(ex, gridOptions=gob.build(), update_mode=GridUpdateMode.NO_UPDATE, height=300, key="grid_exceptions")
+    st.download_button("Export Exceptions CSV", data=ex.to_csv(index=False), file_name="cyclecount_exceptions.csv", mime="text/csv", key="disc_export_btn")
 
-# ------------- Settings -------------
+# ---------- Settings ----------
 with tabs[5]:
     st.subheader("Settings")
     st.write("Environment variables (optional):")
@@ -452,19 +443,17 @@ with tabs[5]:
     st.caption("Tip: point CYCLE_COUNT_LOG_DIR to your OneDrive JT Logistics folder so counters and your dashboard use the same files.")
     st.write("Active paths:", PATHS)
     st.divider()
-
     st.markdown("### Inventory Excel — Upload & Map")
     inv_df_cached = load_cached_inventory()
     if not inv_df_cached.empty:
         st.success(f"Inventory cache loaded: {len(inv_df_cached):,} rows")
         st.dataframe(inv_df_cached.head(10), use_container_width=True)
-    upload = st.file_uploader("Upload Inventory Excel (.xlsx/.xls)", type=["xlsx","xls"])
+    upload = st.file_uploader("Upload Inventory Excel (.xlsx/.xls)", type=["xlsx","xls"], key="settings_upload_inv")
     mapping_hint = "Map your columns to: location, sku, lot_number, pallet_id, expected_qty"
     if upload is not None:
         try:
-            # Read first sheet by default; allow selecting a sheet
             xls = pd.ExcelFile(upload, engine="openpyxl")
-            sheet = st.selectbox("Select sheet", xls.sheet_names, index=0)
+            sheet = st.selectbox("Select sheet", xls.sheet_names, index=0, key="settings_sheet")
             raw = pd.read_excel(xls, sheet_name=sheet, dtype=str).fillna("")
             st.write("Preview (first 10 rows):")
             st.dataframe(raw.head(10), use_container_width=True)
@@ -472,12 +461,18 @@ with tabs[5]:
             st.markdown("#### Column Mapping")
             mapping_prev = load_inventory_mapping()
             c1,c2,c3,c4,c5 = st.columns(5)
-            with c1: loc_col = st.selectbox("Location", ["<none>"]+cols, index=(cols.index(mapping_prev.get("location",""))+1 if mapping_prev.get("location","") in cols else 0))
-            with c2: sku_col = st.selectbox("SKU", ["<none>"]+cols, index=(cols.index(mapping_prev.get("sku",""))+1 if mapping_prev.get("sku","") in cols else 0))
-            with c3: lot_col = st.selectbox("LOT Number", ["<none>"]+cols, index=(cols.index(mapping_prev.get("lot_number",""))+1 if mapping_prev.get("lot_number","") in cols else 0))
-            with c4: pal_col = st.selectbox("Pallet ID", ["<none>"]+cols, index=(cols.index(mapping_prev.get("pallet_id",""))+1 if mapping_prev.get("pallet_id","") in cols else 0))
-            with c5: qty_col = st.selectbox("Expected QTY", ["<none>"]+cols, index=(cols.index(mapping_prev.get("expected_qty",""))+1 if mapping_prev.get("expected_qty","") in cols else 0))
-            if st.button("Save Mapping & Cache Inventory", type="primary"):
+            with c1:
+                loc_col = st.selectbox("Location", ["<none>"]+cols, index=(cols.index(mapping_prev.get("location",""))+1 if mapping_prev.get("location","") in cols else 0), key="map_loc")
+            with c2:
+                sku_col = st.selectbox("SKU", ["<none>"]+cols, index=(cols.index(mapping_prev.get("sku",""))+1 if mapping_prev.get("sku","") in cols else 0), key="map_sku")
+            with c3:
+                lot_col = st.selectbox("LOT Number", ["<none>"]+cols, index=(cols.index(mapping_prev.get("lot_number",""))+1 if mapping_prev.get("lot_number","") in cols else 0), key="map_lot")
+            with c4:
+                pal_col = st.selectbox("Pallet ID", ["<none>"]+cols, index=(cols.index(mapping_prev.get("pallet_id",""))+1 if mapping_prev.get("pallet_id","") in cols else 0), key="map_pal")
+            with c5:
+                qty_col = st.selectbox("Expected QTY", ["<none>"]+cols, index=(cols.index(mapping_prev.get("expected_qty",""))+1 if mapping_prev.get("expected_qty","") in cols else 0), key="map_qty")
+
+            if st.button("Save Mapping & Cache Inventory", type="primary", key="map_save_btn"):
                 mapping = {
                     "location": (loc_col if loc_col!="<none>" else ""),
                     "sku": (sku_col if sku_col!="<none>" else ""),
@@ -492,4 +487,3 @@ with tabs[5]:
                 st.rerun()
         except Exception as e:
             st.warning(f"Excel load error: {e}")
-
