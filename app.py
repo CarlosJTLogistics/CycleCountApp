@@ -361,7 +361,7 @@ with tabs[1]:
     st.subheader("My Assignments")
     me = st.text_input("I am (name)", key="me_name", value=st.session_state.get("assignee",""))
     dfA = load_assignments()
-    mine = dfA[dfA["assignee"].str.lower()==(me or "").lower()] if me else dfA.iloc[0:0]
+    mine = dfA[dfA["assignee"].str.lower() == (me or "").lower()] if me else dfA.iloc[0:0]
 
     cA, cB, cC, cD = st.columns(4)
     cA.metric("Open", int((mine["status"]=="Assigned").sum()))
@@ -375,33 +375,24 @@ with tabs[1]:
             if lock_active(r):
                 who = r.get("lock_owner","?")
                 until = r.get("lock_expires_ts","")
-                if lock_owned_by(r, me): return f"🔒 You until {until}"
+                if lock_owned_by(r, me):
+                    return f"🔒 You until {until}"
                 return f"🔒 {who} until {until}"
             return "Available"
+
         mine_disp = mine.copy()
         mine_disp["lock_info"] = mine_disp.apply(_lock_info2, axis=1)
+
         res = show_table(mine_disp, height=280, key="grid_my_assign", selectable=True, selection_mode="single")
         sel = res.get("selected_rows", [])
         if sel:
             selected = sel[0]
             st.session_state["current_assignment"] = selected
-            c1, c2 = st.columns(2)
-            with c1:
-                if st.button("Start / Renew 20-min Lock", type="primary", use_container_width=True, key="my_lock_btn"):
-                    ok, msg = start_or_renew_lock(selected["assignment_id"], me)
-                    if ok:
-                        st.success(msg); st.rerun()
-    # Removed Start/Renew Lock button for clarity
-    st.info(selected.get("lock_info",""))  # Keep info only
+            st.info(selected.get("lock_info", ""))
+        else:
+            st.info("Select an assignment to view details.")
     else:
-                        st.warning(msg)
-            with c2:
-                st.info(selected.get("lock_info",""))
-    else:
-        st.info("No assignments found for you.")
-
-# ---------- Perform Count ----------
-with tabs[2]:
+        st.info("No assignments found for you.")with tabs[2]:
     st.subheader("Perform Count")
     cur = st.session_state.get("current_assignment", {})
     assignment_id = st.text_input("Assignment ID", value=cur.get("assignment_id",""), key="perform_assignment_id")
