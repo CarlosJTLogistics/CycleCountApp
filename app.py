@@ -1,4 +1,7 @@
-﻿import os, time, uuid, re, json
+﻿# v1.3.4 (My Assignments selection fix + auto-populate via rerun)
+# NOTE: Full file includes all prior features: mobile scan UX, sound/vibe (default ON), xlrd>=2.0.1, lock model, Supervisor Tools (delete assignments), AgGrid support, and no widget value/session conflicts.
+
+import os, time, uuid, re, json
 from datetime import datetime, timedelta
 import pandas as pd
 import streamlit as st
@@ -11,15 +14,13 @@ try:
 except Exception:
     _AGGRID_IMPORTED = False
 
-# ========= App meta =========
 APP_NAME = "Cycle Counting"
-VERSION = "v1.3.3 (Supervisor delete + My Assignments selection fix)"
+VERSION = "v1.3.4 (selection fix + auto-populate)"
 TZ_LABEL = "US/Central"
 LOCK_MINUTES_DEFAULT = 20
 LOCK_MINUTES = int(os.getenv("CC_LOCK_MINUTES", LOCK_MINUTES_DEFAULT))
-
-# ========= Core utils =========
 TS_FMT = "%m/%d/%Y %I:%M:%S %p"
+
 def lot_normalize(x: str) -> str:
     if x is None or (isinstance(x,float) and pd.isna(x)): return ""
     s = re.sub(r"\D", "", str(x))
@@ -83,7 +84,6 @@ def parse_ts(s: str):
     try: return datetime.strptime(s, TS_FMT)
     except Exception: return None
 
-# ========= Data access =========
 def load_assignments():
     df = read_csv_locked(PATHS["assign"], ASSIGN_COLS)
     for c in ["lock_owner","lock_start_ts","lock_expires_ts"]:
@@ -97,7 +97,6 @@ def save_assignments(df: pd.DataFrame):
 
 def load_submissions(): return read_csv_locked(PATHS["subs"], SUBMIT_COLS)
 
-# ========= Inventory Excel/CSV support =========
 def load_cached_inventory() -> pd.DataFrame:
     if "inv_df" in st.session_state:
         return st.session_state["inv_df"]
@@ -164,7 +163,7 @@ def inv_lookup_expected(location: str, sku: str="", lot: str="", pallet_id: str=
     df = inv
     for cond, _ in candidates:
         tmp = df.copy()
-        for k,v in cond.items():
+        for k, v in cond.items():
             if v != "":
                 tmp = tmp[tmp[k].astype(str).str.strip().str.lower() == str(v).strip().lower()]
         if not tmp.empty:
@@ -175,7 +174,6 @@ def inv_lookup_expected(location: str, sku: str="", lot: str="", pallet_id: str=
                     continue
     return None
 
-# ========= Lock helpers =========
 def lock_active(row: pd.Series) -> bool:
     exp = parse_ts(row.get("lock_expires_ts",""))
     return bool(exp and exp > datetime.now())
@@ -208,7 +206,6 @@ def validate_lock_for_submit(assignment_id: str, user: str) -> (bool, str):
     if lock_owned_by(r, user): return True, "Lock valid for user"
     return False, f"Locked by {r.get('lock_owner','?')} until {r.get('lock_expires_ts','?')}"
 
-# ========= UI helpers (mobile, haptics, sound) =========
 def inject_mobile_css(scale: float = 1.2):
     base_px = int(16 * scale)
     st.markdown(f"""
@@ -276,7 +273,6 @@ def emit_feedback():
     </script>
     """, height=0)
 
-# ========= AgGrid safe wrapper =========
 AGGRID_ENABLED = (os.getenv("AGGRID_ENABLED","1") == "1") and _AGGRID_IMPORTED
 def show_table(df, height=300, key=None, selectable=False, selection_mode="single", numeric_cols=None):
     if df is None or (hasattr(df, "empty") and df.empty):
@@ -297,11 +293,9 @@ def show_table(df, height=300, key=None, selectable=False, selection_mode="singl
     st.dataframe(df, use_container_width=True, height=height)
     return {"selected_rows": []}
 
-# ========= App UI =========
 st.set_page_config(page_title=f"{APP_NAME} {VERSION}", layout="wide")
 st.title(f"{APP_NAME} ({VERSION})")
 
-# ---- Session defaults (avoid widget value + session_state conflicts)
 def _ensure_default(k, v):
     if k not in st.session_state: st.session_state[k] = v
 _ensure_default("mobile_mode", True)
@@ -311,7 +305,6 @@ _ensure_default("auto_focus", True)
 _ensure_default("auto_advance", True)
 _ensure_default("auto_submit", False)
 
-# Global toggles (no value=, rely on session_state only)
 top1, top2, top3 = st.columns(3)
 with top1:
     st.toggle("Mobile Mode (scan gun)", key="mobile_mode", help="Larger touch targets + simplified tables")
@@ -320,7 +313,6 @@ with top2:
 with top3:
     st.checkbox("Vibration feedback", key="fb_vibe")
 
-# Apply mobile CSS if enabled
 if st.session_state.get("mobile_mode", True):
     inject_mobile_css(scale=1.2)
 
@@ -439,10 +431,21 @@ with tabs[1]:
             mine_disp["lock_info"] = mine_disp.apply(_lock_info2, axis=1)
             res = show_table(mine_disp, height=300, key="grid_my_assign", selectable=True, selection_mode="single")
             sel = res.get("selected_rows", [])
-            if sel:
-                selected = sel[0]
+            # Normalize selection (DataFrame vs list) and act
+            if isinstance(sel, pd.DataFrame):
+                sel_records = sel.to_dict(orient="records")
+            elif isinstance(sel, list):
+                sel_records = sel
+            else:
+                try:
+                    sel_records = list(sel)
+                except Exception:
+                    sel_records = []
+            if len(sel_records) > 0:
+                selected = sel_records[0]
                 st.session_state["current_assignment"] = selected
                 st.success("Assignment loaded into Perform Count."); queue_feedback("success")
+                st.rerun()
         else:
             # Fallback selector when AgGrid isn't available
             opts = []
@@ -459,6 +462,7 @@ with tabs[1]:
                     selected = mine[mine["assignment_id"]==choice].iloc[0].to_dict()
                     st.session_state["current_assignment"] = selected
                     st.success("Assignment loaded into Perform Count."); queue_feedback("success")
+                    st.rerun()
     else:
         st.info("No assignments found for you.")
     emit_feedback()
@@ -467,7 +471,6 @@ with tabs[1]:
 with tabs[2]:
     st.subheader("Perform Count")
 
-    # Scan UX toggles (session_state only)
     t1, t2, t3 = st.columns(3)
     with t1: st.checkbox("Auto-focus Location", key="auto_focus")
     with t2: st.checkbox("Auto-advance after scan", key="auto_advance")
@@ -484,11 +487,8 @@ with tabs[2]:
     def _on_loc_change():
         st.session_state["_focus_target_label"] = "Scan Pallet ID (optional)" if (st.session_state.get("perform_pallet","")== "") else "Counted QTY"
         queue_feedback("scan")
-
     def _on_pallet_change():
-        st.session_state["_focus_target_label"] = "Counted QTY"
-        queue_feedback("scan")
-
+        st.session_state["_focus_target_label"] = "Counted QTY"; queue_feedback("scan")
     def _on_count_change():
         st.session_state["_auto_submit_try"] = True
 
@@ -646,13 +646,11 @@ def delete_assignments(assign_ids, deleted_by, reason):
     mask = df["assignment_id"].isin(assign_ids)
     sel = df[mask].copy()
     if sel.empty: return 0
-    # Log deleted rows
     for _, r in sel.iterrows():
         row = r.to_dict()
         row.update({"deleted_by": (deleted_by or "").strip(), "deleted_ts": now_str(), "reason": (reason or "").strip()})
         cols = ASSIGN_COLS + ["deleted_by","deleted_ts","reason"]
         safe_append_csv(PATHS["assign_deleted"], row, cols)
-    # Remove and save
     df2 = df[~mask].copy()
     save_assignments(df2)
     return int(len(sel))
@@ -693,9 +691,10 @@ with tabs[5]:
             gob.configure_selection("multiple", use_checkbox=True)
             grid = AgGrid(view, gridOptions=gob.build(), update_mode=GridUpdateMode.SELECTION_CHANGED, height=320, key="sup_assign_grid")
             rows = grid.get("selected_rows", [])
-            selection_ids = [r.get("assignment_id","") for r in rows if r.get("assignment_id","")]
+            if isinstance(rows, pd.DataFrame):
+                rows = rows.to_dict(orient="records")
+            selection_ids = [r.get("assignment_id","") for r in (rows or []) if r.get("assignment_id","")]
         else:
-            # Fallback: multiselect by ID
             options = view["assignment_id"].tolist()
             selection_ids = st.multiselect("Select assignment IDs to delete", options, key="sup_sel_ids")
 
