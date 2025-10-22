@@ -393,7 +393,7 @@ with tabs[1]:
                         st.success(msg); st.rerun()
     # Removed Start/Renew Lock button for clarity
     st.info(selected.get("lock_info",""))  # Keep info only
-                    else:
+    else:
                         st.warning(msg)
             with c2:
                 st.info(selected.get("lock_info",""))
