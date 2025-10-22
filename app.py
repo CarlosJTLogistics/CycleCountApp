@@ -392,7 +392,9 @@ with tabs[1]:
         else:
             st.info("Select an assignment to view details.")
     else:
-        st.info("No assignments found for you.")with tabs[2]:
+        st.info("No assignments found for you.")
+
+with tabs[2]:
     st.subheader("Perform Count")
     cur = st.session_state.get("current_assignment", {})
     assignment_id = st.text_input("Assignment ID", value=cur.get("assignment_id",""), key="perform_assignment_id")
@@ -546,3 +548,4 @@ with tabs[5]:
                 st.rerun()
         except Exception as e:
             st.warning(f"Excel load error: {e}")
+
