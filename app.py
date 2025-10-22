@@ -425,7 +425,11 @@ with tabs[2]:
     note = st.text_input("Note (optional)", key="perform_note")
 
     if assignment_id and assignee and st.button("Start / Renew 20-min Lock", use_container_width=True, key="perform_lock_btn"):
-        try:
+            try:
+        ok, msg = start_or_renew_lock(assignment_id, assignee)
+        st.success(msg) if ok else st.warning(msg)
+    except Exception as e:
+        st.warning(f"Lock error: {e}")
         ok, msg = start_or_renew_lock(assignment_id, assignee)
     except Exception as e:
         ok, msg = False, f"Lock error: {e}"
@@ -558,4 +562,5 @@ with tabs[5]:
                 st.rerun()
         except Exception as e:
             st.warning(f"Excel load error: {e}")
+
 
