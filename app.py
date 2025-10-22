@@ -1,18 +1,19 @@
-﻿# v1.3.6 (Removed Supervisor Tools; Settings now loads)
-# Keeps: mobile scan UX, sound/vibe default ON, AgGrid selection + rerun, xlrd>=2.0.1, locks, mapping.
+﻿# v1.3.7 (escape f-string braces; Supervisor Tools removed; Settings loads)
 import os, time, uuid, re, json
 from datetime import datetime, timedelta
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
+
 # Try to import AgGrid; fall back gracefully if not available
 try:
     from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
     _AGGRID_IMPORTED = True
 except Exception:
     _AGGRID_IMPORTED = False
+
 APP_NAME = "Cycle Counting"
-VERSION = "v1.3.6 (no Supervisor Tools; Settings loads)"
+VERSION = "v1.3.7 (fix f-strings; no Supervisor Tools)"
 TZ_LABEL = "US/Central"
 LOCK_MINUTES_DEFAULT = 20
 LOCK_MINUTES = int(os.getenv("CC_LOCK_MINUTES", LOCK_MINUTES_DEFAULT))
@@ -40,14 +41,16 @@ def get_paths():
         "inv_csv": os.path.join(active, "inventory_lookup.csv"),
         "inv_map": os.path.join(active, "inventory_mapping.json"),
     }
+
 PATHS = get_paths()
+
 ASSIGN_COLS = [
     "assignment_id","assigned_by","assignee","location","sku","lot_number","pallet_id",
     "expected_qty","priority","status","created_ts","due_date","notes",
     "lock_owner","lock_start_ts","lock_expires_ts"
 ]
-# NOTE: SUBMIT_COLS still includes 'device_id' for CSV schema compatibility,
-# but we now write it as empty ("") since the UI no longer collects it.
+
+# Keep 'device_id' column for CSV schema compatibility (we write it as empty "")
 SUBMIT_COLS = [
     "submission_id","assignment_id","assignee","location","sku","lot_number","pallet_id",
     "counted_qty","expected_qty","variance","variance_flag","timestamp","device_id","note"
@@ -109,6 +112,7 @@ def load_cached_inventory() -> pd.DataFrame:
 def save_inventory_cache(df: pd.DataFrame):
     df.to_csv(PATHS["inv_csv"], index=False, encoding="utf-8")
     st.session_state["inv_df"] = df
+
 def save_inventory_mapping(mapping: dict):
     with open(PATHS["inv_map"], "w", encoding="utf-8") as f:
         json.dump(mapping, f, indent=2)
@@ -164,10 +168,8 @@ def inv_lookup_expected(location: str, sku: str="", lot: str="", pallet_id: str=
                 tmp = tmp[tmp[k].astype(str).str.strip().str.lower() == str(v).strip().lower()]
         if not tmp.empty:
             for val in tmp["expected_qty"].tolist():
-                try:
-                    return int(float(val))
-                except Exception:
-                    continue
+                try: return int(float(val))
+                except Exception: continue
     return None
 
 def lock_active(row: pd.Series) -> bool:
@@ -202,7 +204,8 @@ def validate_lock_for_submit(assignment_id: str, user: str) -> (bool, str):
     if lock_owned_by(r, user): return True, "Lock valid for user"
     return False, f"Locked by {r.get('lock_owner','?')} until {r.get('lock_expires_ts','?')}"
 
-# ---- UI helpers (mobile, haptics, sound)
+# -------- UI helpers (mobile, haptics, sound)
+
 def inject_mobile_css(scale: float = 1.2):
     base_px = int(16 * scale)
     st.markdown(f"""
@@ -217,14 +220,14 @@ def focus_by_label(label_text: str):
     if not label_text: return
     components.html(f"""
         <script>
-        setTimeout(function(){{
+        setTimeout(function(){{{{ 
             const labs=[...parent.document.querySelectorAll('label')];
             const lab=labs.find(el=>el.innerText.trim()==="{label_text}".trim());
-            if(lab){{
+            if(lab){{{{ 
                 const inp=lab.parentElement.querySelector('input,textarea');
-                if(inp){ inp.focus(); if(inp.select) inp.select(); }
-            }}
-        }}, 150);
+                if(inp){{{{ inp.focus(); if(inp.select) inp.select(); }}}}
+            }}}}
+        }} , 150);
         </script>
     """, height=0)
 
@@ -241,36 +244,37 @@ def emit_feedback():
     nonce = uuid.uuid4().hex
     components.html(f"""
         <script>
-        (function(){{
+        (function(){{{{ 
             const enableSound = {snd}, enableVibe = {vib};
-            function beep(pattern){{
-                try{{
+            function beep(pattern){{{{ 
+                try{{{{ 
                     const ctx = new (window.AudioContext||window.webkitAudioContext)();
                     const g = ctx.createGain(); g.gain.value = 0.08; g.connect(ctx.destination);
                     let t = ctx.currentTime;
-                    pattern.forEach(p => {{
+                    pattern.forEach(p => {{{{ 
                         const o = ctx.createOscillator();
                         o.type = p.type || 'sine';
                         o.frequency.setValueAtTime(p.f, t);
                         o.connect(g); o.start(t); o.stop(t + p.d/1000);
                         t += (p.d + (p.gap||40))/1000;
-                    }});
-                }} catch(e){{}}
-            }}
-            function vibrate(seq){{ try{{ if (navigator.vibrate) navigator.vibrate(seq); }} catch(e){{}} }}
+                    }}}});
+                }}}} catch(e){{{{}}}}
+            }}}}
+            function vibrate(seq){{{{ try{{{{ if (navigator.vibrate) navigator.vibrate(seq); }}}} catch(e){{{{}}}} }}}}
             let tone=[], vib=[];
-            switch("{kind}"){{
-                case "scan": tone=[{{f:1000,d:60}},{{f:1200,d:60}}]; vib=[40,20,40]; break;
-                case "success": tone=[{{f:880,d:120}},{{f:1320,d:120}}]; vib=[70,30,70]; break;
-                case "error": tone=[{{f:220,d:220,type:'square'}},{{f:180,d:180,type:'square'}}]; vib=[200,100,200]; break;
-            }}
+            switch("{kind}"){{{{ 
+                case "scan": tone=[{{{{f:1000,d:60}}}},{{{{f:1200,d:60}}}}]; vib=[40,20,40]; break;
+                case "success": tone=[{{{{f:880,d:120}}}},{{{{f:1320,d:120}}}}]; vib=[70,30,70]; break;
+                case "error": tone=[{{{{f:220,d:220,type:'square'}}}},{{{{f:180,d:180,type:'square'}}}}]; vib=[200,100,200]; break;
+            }}}}
             if (enableSound && tone.length) beep(tone);
             if (enableVibe && vib.length) vibrate(vib);
-        }})(); // {nonce}
+        }}}})(); // {nonce}
         </script>
     """, height=0)
 
 AGGRID_ENABLED = (os.getenv("AGGRID_ENABLED","1") == "1") and _AGGRID_IMPORTED
+
 def show_table(df, height=300, key=None, selectable=False, selection_mode="single", numeric_cols=None):
     if df is None or (hasattr(df, "empty") and df.empty):
         st.info("No data"); return {"selected_rows": []}
@@ -326,10 +330,12 @@ with tabs[0]:
         assigned_by = st.text_input("Assigned by", value=st.session_state.get("assigned_by",""), key="assign_assigned_by")
     with c_top2:
         assignee = st.text_input("Assign to (name)", value=st.session_state.get("assignee",""), key="assign_assignee")
+
     inv_df = load_cached_inventory()
     loc_options = []
     if inv_df is not None and hasattr(inv_df, "empty") and not inv_df.empty and "location" in inv_df.columns:
         loc_options = sorted(inv_df["location"].astype(str).str.strip().replace("nan","").dropna().unique().tolist())
+
     st.caption("Select multiple locations and/or paste a list. Other fields auto-fill from the inventory cache.")
     colL, colR = st.columns([1.2, 1])
     with colL:
@@ -358,7 +364,7 @@ with tabs[0]:
                         not_in_cache.append(str(loc).strip())
                 is_dup = False
                 if dfA is not None and not dfA.empty:
-                    cand = dfA[(dfA["location"].astype(str).str.strip().str.lower() == str(loc).strip().lower()) & (dfA["status"].isin(["Assigned","In Progress"]))] 
+                    cand = dfA[(dfA["location"].astype(str).str.strip().str.lower() == str(loc).strip().lower()) & (dfA["status"].isin(["Assigned","In Progress"]))]
                     is_dup = not cand.empty
                 if is_dup: dup_conflicts.append(loc); continue
                 if _any_lock_active_for(loc): locked_conflicts.append(loc); continue
@@ -390,6 +396,7 @@ with tabs[0]:
             if dup_conflicts: st.warning(f"Skipped {len(dup_conflicts)} duplicate location(s) already Assigned/In Progress: {', '.join(map(str, dup_conflicts[:10]))}{'…' if len(dup_conflicts)>10 else ''}")
             if locked_conflicts: st.warning(f"Skipped {len(locked_conflicts)} location(s) currently locked by another user.")
             if not_in_cache: st.info(f"{len(not_in_cache)} location(s) not in inventory cache (FYI): {', '.join(map(str, not_in_cache[:10]))}{'…' if len(not_in_cache)>10 else ''}")
+
     st.divider()
     dfA = load_assignments()
     if not dfA.empty:
@@ -432,10 +439,8 @@ with tabs[1]:
             elif isinstance(sel, list):
                 sel_records = sel
             else:
-                try:
-                    sel_records = list(sel)
-                except Exception:
-                    sel_records = []
+                try: sel_records = list(sel)
+                except Exception: sel_records = []
             if len(sel_records) > 0:
                 selected = sel_records[0]
                 st.session_state["current_assignment"] = selected
@@ -468,48 +473,61 @@ with tabs[2]:
     with t1: st.checkbox("Auto-focus Location", key="auto_focus")
     with t2: st.checkbox("Auto-advance after scan", key="auto_advance")
     with t3: st.checkbox("Auto-submit after Counted", key="auto_submit")
+
     auto_focus = st.session_state.get("auto_focus", True)
     auto_advance= st.session_state.get("auto_advance", True)
     auto_submit = st.session_state.get("auto_submit", False)
+
     cur = st.session_state.get("current_assignment", {})
     assignment_id = st.text_input("Assignment ID", value=cur.get("assignment_id",""), key="perform_assignment_id")
     assignee = st.text_input("Assignee", value=cur.get("assignee", st.session_state.get("me_name","")), key="perform_assignee")
+
     def _on_loc_change():
         st.session_state["_focus_target_label"] = "Scan Pallet ID (optional)" if (st.session_state.get("perform_pallet","")== "") else "Counted QTY"
         queue_feedback("scan")
+
     def _on_pallet_change():
         st.session_state["_focus_target_label"] = "Counted QTY"; queue_feedback("scan")
+
     def _on_count_change():
         st.session_state["_auto_submit_try"] = True
+
     c1, c2 = st.columns(2)
     with c1:
         location = st.text_input("Scan Location", value=cur.get("location",""), placeholder="Scan or type location", key="perform_location", on_change=_on_loc_change)
     with c2:
         pallet = st.text_input("Scan Pallet ID (optional)", value=cur.get("pallet_id",""), placeholder="Scan pallet ID", key="perform_pallet", on_change=_on_pallet_change)
+
     c3, c4, c5 = st.columns(3)
     with c3:
         sku = st.text_input("SKU (optional)", value=cur.get("sku",""), key="perform_sku")
     with c4:
         lot = st.text_input("LOT Number (optional)", value=cur.get("lot_number",""), key="perform_lot")
+
     auto_expected = inv_lookup_expected(location, sku, lot, pallet)
     cur_exp = cur.get("expected_qty","")
     try_cur_exp = int(cur_exp) if str(cur_exp).isdigit() else None
     default_expected = auto_expected if auto_expected is not None else (try_cur_exp if try_cur_exp is not None else 0)
     with c5:
         expected_num = st.number_input("Expected QTY (auto from Inventory if available)", min_value=0, value=int(default_expected), key="perform_expected")
+
     counted_str = st.text_input("Counted QTY", value=st.session_state.get("perform_counted_str",""), placeholder="Scan/enter count", key="perform_counted_str", on_change=_on_count_change)
+
     def _parse_count(s):
         s = (s or "").strip()
         if s == "": return None
-        if not re.fullmatch(r"\\d+", s): return "invalid"
+        if not re.fullmatch(r"\d+", s): return "invalid"
         return int(s)
+
     counted_val = _parse_count(counted_str)
     note = st.text_input("Note (optional)", key="perform_note")
+
     if auto_focus and not st.session_state.get("_did_autofocus"):
         focus_by_label("Scan Location"); st.session_state["_did_autofocus"] = True
     target = st.session_state.get("_focus_target_label","")
     if auto_advance and target:
         focus_by_label(target); st.session_state["_focus_target_label"] = ""
+
     if assignment_id and assignee and st.button("Start / Renew 20-min Lock", use_container_width=True, key="perform_lock_btn"):
         try:
             ok, msg = start_or_renew_lock(assignment_id, assignee)
@@ -517,6 +535,7 @@ with tabs[2]:
             if ok: queue_feedback("success")
         except Exception as e:
             st.warning(f"Lock error: {e}"); queue_feedback("error")
+
     if st.button("Submit Count", type="primary", key="perform_submit_btn", use_container_width=True):
         if not assignee or not location:
             st.warning("Assignee and Location are required."); queue_feedback("error")
@@ -555,6 +574,7 @@ with tabs[2]:
                         save_assignments(dfA2)
                 st.success("Submitted"); queue_feedback("success")
                 st.session_state["perform_counted_str"] = ""
+
     if auto_submit and st.session_state.get("_auto_submit_try", False):
         st.session_state["_auto_submit_try"] = False
         if assignee and location and (counted_val not in (None, "invalid")):
@@ -630,7 +650,7 @@ with tabs[4]:
     show_table(ex_disp, height=300, key="grid_exceptions", numeric_cols=["variance"])
     st.download_button("Export Exceptions CSV", data=ex.to_csv(index=False), file_name="cyclecount_exceptions.csv", mime="text/csv", key="disc_export_btn")
 
-# ---------- Settings (no st.stop anywhere)
+# ---------- Settings
 with tabs[5]:
     st.subheader("Settings")
     st.write("Environment variables (optional):")
@@ -638,8 +658,7 @@ with tabs[5]:
 BIN_HELPER_LOG_DIR=<fallback if set>
 CC_LOCK_MINUTES=<default 20>
 AGGRID_ENABLED=<1 or 0>
-SUPERVISOR_PIN=<(unused) was for removed tools>
-""", language="bash")
+SUPERVISOR_PIN=<(unused)>""", language="bash")
     st.caption("Tip: point CYCLE_COUNT_LOG_DIR to your OneDrive JT Logistics folder so counters and your dashboard use the same files.")
     st.write("Active paths:", PATHS)
     st.divider()
