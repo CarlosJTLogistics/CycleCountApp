@@ -1,4 +1,4 @@
-ï»¿# v1.3.7 (escape f-string braces; Supervisor Tools removed; Settings loads)
+# v1.3.7 (escape f-string braces; Supervisor Tools removed; Settings loads)
 import os, time, uuid, re, json
 from datetime import datetime, timedelta
 import pandas as pd
@@ -317,7 +317,7 @@ with _top3:
 if st.session_state.get("mobile_mode", True):
     inject_mobile_css(scale=1.2)
 
-st.caption(f"Active log dir: {PATHS['root']} Â· Timezone: {TZ_LABEL} Â· Lock: {LOCK_MINUTES} min")
+st.caption(f"Active log dir: {PATHS['root']} · Timezone: {TZ_LABEL} · Lock: {LOCK_MINUTES} min")
 
 # Tabs (Supervisor Tools removed)
 tabs = st.tabs(["Assign Counts","My Assignments","Perform Count","Dashboard (Live)","Discrepancies","Settings"])
@@ -393,9 +393,9 @@ with tabs[0]:
             st.session_state["assigned_by"] = assigned_by
             st.session_state["assignee"] = assignee
             if created > 0: st.success(f"Created {created} assignment(s) for {assignee}."); queue_feedback("success")
-            if dup_conflicts: st.warning(f"Skipped {len(dup_conflicts)} duplicate location(s) already Assigned/In Progress: {', '.join(map(str, dup_conflicts[:10]))}{'â€¦' if len(dup_conflicts)>10 else ''}")
+            if dup_conflicts: st.warning(f"Skipped {len(dup_conflicts)} duplicate location(s) already Assigned/In Progress: {', '.join(map(str, dup_conflicts[:10]))}{'…' if len(dup_conflicts)>10 else ''}")
             if locked_conflicts: st.warning(f"Skipped {len(locked_conflicts)} location(s) currently locked by another user.")
-            if not_in_cache: st.info(f"{len(not_in_cache)} location(s) not in inventory cache (FYI): {', '.join(map(str, not_in_cache[:10]))}{'â€¦' if len(not_in_cache)>10 else ''}")
+            if not_in_cache: st.info(f"{len(not_in_cache)} location(s) not in inventory cache (FYI): {', '.join(map(str, not_in_cache[:10]))}{'…' if len(not_in_cache)>10 else ''}")
 
     st.divider()
     dfA = load_assignments()
@@ -403,7 +403,7 @@ with tabs[0]:
         def _lock_info(r):
             if lock_active(r):
                 who = r.get("lock_owner","?"); until = r.get("lock_expires_ts","")
-                return f"ðŸ”’ {who} until {until}"
+                return f"?? {who} until {until}"
             return "Available"
         dfA_disp = dfA.copy(); dfA_disp["lock_info"] = dfA_disp.apply(_lock_info, axis=1)
         st.write("All Assignments")
@@ -428,7 +428,7 @@ with tabs[1]:
             def _lock_info2(r):
                 if lock_active(r):
                     who = r.get("lock_owner","?"); until = r.get("lock_expires_ts","")
-                    return f"ðŸ”’ {'You' if (who or '').lower()==(me or '').lower() else who} until {until}"
+                    return f"?? {'You' if (who or '').lower()==(me or '').lower() else who} until {until}"
                 return "Available"
             mine_disp = mine.copy()
             mine_disp["lock_info"] = mine_disp.apply(_lock_info2, axis=1)
@@ -449,7 +449,7 @@ with tabs[1]:
         else:
             opts = []
             for _, r in mine.iterrows():
-                label = f"{r.get('assignment_id','')} â€” {r.get('location','')} â€” {r.get('status','')}"
+                label = f"{r.get('assignment_id','')} — {r.get('location','')} — {r.get('status','')}"
                 opts.append((label, r.get("assignment_id","")))
             if opts:
                 def _fmt(val):
@@ -662,7 +662,7 @@ SUPERVISOR_PIN=<(unused)>""", language="bash")
     st.caption("Tip: point CYCLE_COUNT_LOG_DIR to your OneDrive JT Logistics folder so counters and your dashboard use the same files.")
     st.write("Active paths:", PATHS)
     st.divider()
-    st.markdown("### Inventory Excel â€” Upload & Map")
+    st.markdown("### Inventory Excel — Upload & Map")
     inv_df_cached = load_cached_inventory()
     if not inv_df_cached.empty:
         st.success(f"Inventory cache loaded: {len(inv_df_cached):,} rows")
