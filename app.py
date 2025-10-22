@@ -1,14 +1,14 @@
-﻿# v1.4.4 (Fix: auto-populate after Submit Assignment)
-# - Bug fix: removed premature setting of _perform_loaded_from in My Assignments (caused hydration to skip)
-# - Added second-chance hydration in Perform Count if fields are blank
-# - Preserved submit (green/red), lock, JS tab switch, haptics ON, and default mapping
+﻿# v1.4.5
+# - Removed Auto-submit (UI + logic)
+# - Submit Count now uses a safe on_click handler to write submission, update assignment, show feedback,
+#   reset perform_counted_str, and st.rerun() to avoid StreamlitAPIException on Cloud
+# - Keeps 'Submit Assignment' flow, auto-switch to Perform Count, default mapping, haptics, and 20-min lock
 import os, time, uuid, re, json
 from datetime import datetime, timedelta
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
-# Try to import AgGrid; fall back gracefully if not available
 try:
     from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
     _AGGRID_IMPORTED = True
@@ -16,13 +16,12 @@ except Exception:
     _AGGRID_IMPORTED = False
 
 APP_NAME = "Cycle Counting"
-VERSION = "v1.4.4 (auto-populate fix)"
+VERSION = "v1.4.5 (remove auto-submit; safe submit handler)"
 TZ_LABEL = "US/Central"
 LOCK_MINUTES_DEFAULT = 20
 LOCK_MINUTES = int(os.getenv("CC_LOCK_MINUTES", LOCK_MINUTES_DEFAULT))
 TS_FMT = "%m/%d/%Y %I:%M:%S %p"
 
-# ------- Defaults (per screenshot)
 DEFAULT_MAPPING = {
     "location": "LocationName",
     "sku": "WarehouseSku",
@@ -62,13 +61,11 @@ ASSIGN_COLS = [
     "lock_owner","lock_start_ts","lock_expires_ts"
 ]
 
-# Keep 'device_id' column for CSV schema compatibility (we write it as empty "")
 SUBMIT_COLS = [
     "submission_id","assignment_id","assignee","location","sku","lot_number","pallet_id",
     "counted_qty","expected_qty","variance","variance_flag","timestamp","device_id","note"
 ]
 
-# ------- CSV helpers (encoding fallback)
 _ENCODINGS = ["utf-8", "cp1252", "latin-1"]
 
 def read_csv_fallback(fp, dtype=str):
@@ -77,8 +74,7 @@ def read_csv_fallback(fp, dtype=str):
         try:
             return pd.read_csv(fp, dtype=dtype, encoding=enc).fillna("")
         except Exception as e:
-            last_err = e
-            continue
+            last_err = e; continue
     try:
         return pd.read_csv(fp, dtype=dtype, encoding="latin-1", on_bad_lines="skip").fillna("")
     except Exception as e2:
@@ -92,10 +88,8 @@ def safe_append_csv(path, row: dict, columns: list):
     df = pd.DataFrame([row], columns=columns)
     tmp = path + ".tmp"
     if exists:
-        with open(tmp, "a", encoding="utf-8") as f:
-            df.to_csv(f, header=False, index=False)
-        with open(tmp, "rb") as fin, open(path, "ab") as fout:
-            fout.write(fin.read())
+        with open(tmp, "a", encoding="utf-8") as f: df.to_csv(f, header=False, index=False)
+        with open(tmp, "rb") as fin, open(path, "ab") as fout: fout.write(fin.read())
         os.remove(tmp)
     else:
         df.to_csv(path, index=False, encoding="utf-8")
@@ -103,10 +97,8 @@ def safe_append_csv(path, row: dict, columns: list):
 def read_csv_locked(path, columns=None):
     if not os.path.exists(path): return pd.DataFrame(columns=columns or [])
     for _ in range(5):
-        try:
-            return read_csv_fallback(path, dtype=str)
-        except Exception:
-            time.sleep(0.1)
+        try: return read_csv_fallback(path, dtype=str)
+        except Exception: time.sleep(0.1)
     return pd.DataFrame(columns=columns or [])
 
 def now_str(): return datetime.now().strftime(TS_FMT)
@@ -128,17 +120,13 @@ def save_assignments(df: pd.DataFrame):
 
 def load_submissions(): return read_csv_locked(PATHS["subs"], SUBMIT_COLS)
 
-# ------- Inventory cache & mapping
 def load_cached_inventory() -> pd.DataFrame:
-    if "inv_df" in st.session_state:
-        return st.session_state["inv_df"]
+    if "inv_df" in st.session_state: return st.session_state["inv_df"]
     if os.path.exists(PATHS["inv_csv"]):
         try:
             inv = read_csv_fallback(PATHS["inv_csv"], dtype=str).fillna("")
-            st.session_state["inv_df"] = inv
-            return inv
-        except Exception:
-            pass
+            st.session_state["inv_df"] = inv; return inv
+        except Exception: pass
     return pd.DataFrame(columns=["location","sku","lot_number","pallet_id","expected_qty"])
 
 def save_inventory_cache(df: pd.DataFrame):
@@ -146,15 +134,12 @@ def save_inventory_cache(df: pd.DataFrame):
     st.session_state["inv_df"] = df
 
 def save_inventory_mapping(mapping: dict):
-    with open(PATHS["inv_map"], "w", encoding="utf-8") as f:
-        json.dump(mapping, f, indent=2)
+    with open(PATHS["inv_map"], "w", encoding="utf-8") as f: json.dump(mapping, f, indent=2)
 
 def load_inventory_mapping() -> dict:
     if os.path.exists(PATHS["inv_map"]):
-        try:
-            return json.load(open(PATHS["inv_map"], "r", encoding="utf-8"))
-        except Exception:
-            return {}
+        try: return json.load(open(PATHS["inv_map"], "r", encoding="utf-8"))
+        except Exception: return {}
     return {}
 
 def normalize_inventory_df(df: pd.DataFrame, mapping: dict) -> pd.DataFrame:
@@ -177,10 +162,7 @@ def normalize_inventory_df(df: pd.DataFrame, mapping: dict) -> pd.DataFrame:
 def inv_lookup_expected(location: str, sku: str="", lot: str="", pallet_id: str=""):
     inv = load_cached_inventory()
     if inv.empty or "expected_qty" not in inv.columns: return None
-    loc = (location or "").strip()
-    sku = (sku or "").strip()
-    pal = (pallet_id or "").strip()
-    lotN = lot_normalize(lot)
+    loc = (location or "").strip(); sku = (sku or "").strip(); pal = (pallet_id or "").strip(); lotN = lot_normalize(lot)
     if loc == "" and pal == "" and sku == "" and lotN == "": return None
     candidates = [
         ({"location":loc, "pallet_id":pal, "lot_number":lotN, "sku":sku}, True),
@@ -200,10 +182,8 @@ def inv_lookup_expected(location: str, sku: str="", lot: str="", pallet_id: str=
                 tmp = tmp[tmp[k].astype(str).str.strip().str.lower() == str(v).strip().lower()]
         if not tmp.empty:
             for val in tmp["expected_qty"].tolist():
-                try:
-                    return int(float(val))
-                except Exception:
-                    continue
+                try: return int(float(val))
+                except Exception: continue
     return None
 
 def lock_active(row: pd.Series) -> bool:
@@ -218,9 +198,7 @@ def start_or_renew_lock(assignment_id: str, user: str):
     df = load_assignments()
     ix = df.index[df["assignment_id"]==assignment_id]
     if len(ix)==0: return False, "Assignment not found"
-    i = ix[0]
-    now = datetime.now()
-    exp = now + timedelta(minutes=LOCK_MINUTES)
+    i = ix[0]; now = datetime.now(); exp = now + timedelta(minutes=LOCK_MINUTES)
     df.loc[i, "status"] = "In Progress"
     df.loc[i, "lock_owner"] = user.strip()
     df.loc[i, "lock_start_ts"] = now.strftime(TS_FMT)
@@ -237,17 +215,6 @@ def validate_lock_for_submit(assignment_id: str, user: str) -> (bool, str):
     if not lock_active(r): return True, "Lock expired or not set; proceeding"
     if lock_owned_by(r, user): return True, "Lock valid for user"
     return False, f"Locked by {r.get('lock_owner','?')} until {r.get('lock_expires_ts','?')}"
-
-# ------- UI helpers (mobile, haptics, sound, tab switch)
-def inject_mobile_css(scale: float = 1.2):
-    base_px = int(16 * scale)
-    st.markdown(f"""
-    <style>
-    .stTextInput input, .stNumberInput input {{ font-size: {base_px}px !important; padding: 12px 14px !important; }}
-    .stButton > button {{ font-size: {base_px}px !important; padding: 12px 16px !important; width: 100% !important; }}
-    .stSelectbox, .stMultiselect, .stTextArea textarea {{ font-size: {base_px}px !important; }}
-    </style>
-    """, unsafe_allow_html=True)
 
 def focus_by_label(label_text: str):
     if not label_text: return
@@ -354,9 +321,9 @@ _ensure_default("fb_sound", True)
 _ensure_default("fb_vibe", True)
 _ensure_default("auto_focus", True)
 _ensure_default("auto_advance", True)
-_ensure_default("auto_submit", False)
+# auto_submit removed entirely
 
-# -------- Session-only mapping helpers
+# ----- Mapping helpers
 def _get_session_mapping():
     return st.session_state.get("map_defaults", {})
 
@@ -372,7 +339,6 @@ def _set_session_mapping(mapping: dict):
 st.caption("Tip: Click an assignment, then press 'Submit Assignment' to open Perform Count.")
 st.caption(f"Active log dir: {PATHS['root']} · Timezone: {TZ_LABEL} · Lock: {LOCK_MINUTES} min")
 
-# Tabs (Supervisor Tools removed)
 tabs = st.tabs(["Assign Counts","My Assignments","Perform Count","Dashboard (Live)","Discrepancies","Settings"])
 
 # -------- Assign Counts
@@ -450,7 +416,7 @@ with tabs[0]:
             if locked_conflicts: st.warning(f"Skipped {len(locked_conflicts)} location(s) currently locked by another user.")
             if not_in_cache: st.info(f"{len(not_in_cache)} location(s) not in inventory cache (FYI): {', '.join(map(str, not_in_cache[:10]))}{'…' if len(not_in_cache)>10 else ''}")
 
-# -------- My Assignments (click row -> Submit Assignment button)
+# -------- My Assignments
 with tabs[1]:
     st.subheader("My Assignments")
     me = st.text_input("I am (name)", key="me_name", value=st.session_state.get("assignee",""))
@@ -478,17 +444,13 @@ with tabs[1]:
             mine_disp["lock_info"] = mine_disp.apply(_lock_info2, axis=1)
             res = show_table(mine_disp, height=300, key="grid_my_assign", selectable=True, selection_mode="single")
             sel = res.get("selected_rows", [])
-            if isinstance(sel, pd.DataFrame):
-                srec = sel.to_dict(orient="records")
-            elif isinstance(sel, list):
-                srec = sel
+            if isinstance(sel, pd.DataFrame): srec = sel.to_dict(orient="records")
+            elif isinstance(sel, list):       srec = sel
             else:
                 try: srec = list(sel)
                 except Exception: srec = []
-            if srec:
-                selected_dict = srec[0]
+            if srec: selected_dict = srec[0]
         else:
-            # Fallback radio selector
             opts = []
             for _, r in mine.iterrows():
                 label = f"{r.get('assignment_id','')} — {r.get('location','')} — {r.get('status','')}"
@@ -499,14 +461,10 @@ with tabs[1]:
                         if v == val: return lbl
                     return val
                 choice = st.radio("Select an assignment", [v for _, v in opts], format_func=_fmt, key="my_assign_choice")
-                if choice:
-                    selected_dict = mine[mine["assignment_id"]==choice].iloc[0].to_dict()
+                if choice: selected_dict = mine[mine["assignment_id"]==choice].iloc[0].to_dict()
 
-        # Store "pending selection" only
-        if selected_dict:
-            st.session_state["pending_assignment"] = selected_dict
+        if selected_dict: st.session_state["pending_assignment"] = selected_dict
 
-        # Action panel for the pending selection
         pending = st.session_state.get("pending_assignment")
         if pending:
             st.markdown(f"**Selected:** `{pending.get('assignment_id','')}` — **Location:** `{pending.get('location','')}` — **Status:** `{pending.get('status','')}`")
@@ -515,7 +473,6 @@ with tabs[1]:
                 if not me:
                     st.error("Enter your name above to continue."); queue_feedback("error")
                 else:
-                    # Fetch authoritative row by id
                     dfA2 = load_assignments()
                     row = dfA2[dfA2["assignment_id"]==assign_id]
                     if row.empty:
@@ -533,7 +490,6 @@ with tabs[1]:
                             if not ok:
                                 st.error(msg); queue_feedback("error")
                             else:
-                                # Success: set as current assignment; DO NOT set _perform_loaded_from here
                                 st.session_state["current_assignment"] = r.to_dict()
                                 st.success(f"{msg} — Opening Perform Count…"); queue_feedback("success")
                                 switch_to_tab("Perform Count")
@@ -541,24 +497,20 @@ with tabs[1]:
         st.info("No assignments found for you.")
     emit_feedback()
 
-# -------- Perform Count (hydrate from current_assignment; no value= mixing)
+# -------- Perform Count
 with tabs[2]:
     st.subheader("Perform Count")
-    t1, t2, t3 = st.columns(3)
+    t1, t2 = st.columns(2)
     with t1: st.checkbox("Auto-focus Location", key="auto_focus")
     with t2: st.checkbox("Auto-advance after scan", key="auto_advance")
-    with t3: st.checkbox("Auto-submit after Counted", key="auto_submit")
 
     auto_focus  = st.session_state.get("auto_focus", True)
     auto_advance= st.session_state.get("auto_advance", True)
-    auto_submit = st.session_state.get("auto_submit", False)
 
     def _hydrate_from_current(cur: dict):
         exp_raw = cur.get("expected_qty","")
-        try:
-            exp_int = int(float(exp_raw)) if str(exp_raw).strip() != "" else 0
-        except Exception:
-            exp_int = 0
+        try: exp_int = int(float(exp_raw)) if str(exp_raw).strip() != "" else 0
+        except Exception: exp_int = 0
         st.session_state.update({
             "perform_assignment_id": cur.get("assignment_id",""),
             "perform_assignee": cur.get("assignee", st.session_state.get("me_name","")),
@@ -567,22 +519,18 @@ with tabs[2]:
             "perform_sku":      cur.get("sku",""),
             "perform_lot":      cur.get("lot_number",""),
             "perform_expected": exp_int,
-            "perform_counted_str": "",
+            "perform_counted_str": st.session_state.get("perform_counted_str",""),
         })
 
-    # Primary hydration path
     cur = st.session_state.get("current_assignment", {})
     selected_id = cur.get("assignment_id", "")
     loaded_from = st.session_state.get("_perform_loaded_from", "")
     if selected_id and selected_id != loaded_from:
         _hydrate_from_current(cur)
         st.session_state["_perform_loaded_from"] = selected_id
-
-    # Second-chance hydration: if we have a current assignment but fields are blank
     if cur and not st.session_state.get("perform_assignment_id"):
         _hydrate_from_current(cur)
-        if selected_id:
-            st.session_state["_perform_loaded_from"] = selected_id
+        if selected_id: st.session_state["_perform_loaded_from"] = selected_id
 
     assignment_id = st.text_input("Assignment ID", key="perform_assignment_id")
     assignee      = st.text_input("Assignee", key="perform_assignee")
@@ -592,8 +540,6 @@ with tabs[2]:
         queue_feedback("scan")
     def _on_pallet_change():
         st.session_state["_focus_target_label"] = "Counted QTY"; queue_feedback("scan")
-    def _on_count_change():
-        st.session_state["_auto_submit_try"] = True
 
     c1, c2 = st.columns(2)
     with c1:
@@ -607,20 +553,19 @@ with tabs[2]:
     with c4:
         lot = st.text_input("LOT Number (optional)", key="perform_lot")
 
-    # Auto Expected QTY from inventory cache
     auto_expected = inv_lookup_expected(location, sku, lot, pallet)
     if auto_expected is not None and st.session_state.get("perform_expected") != int(auto_expected):
         st.session_state["perform_expected"] = int(auto_expected)
     with c5:
         expected_num = st.number_input("Expected QTY (auto from Inventory if available)", min_value=0, key="perform_expected")
 
-    counted_str = st.text_input("Counted QTY", placeholder="Scan/enter count", key="perform_counted_str", on_change=_on_count_change)
+    counted_str = st.text_input("Counted QTY", placeholder="Scan/enter count", key="perform_counted_str")
+
     def _parse_count(s):
         s = (s or "").strip()
         if s == "": return None
         if not re.fullmatch(r"\d+", s): return "invalid"
         return int(s)
-    counted_val = _parse_count(counted_str)
 
     note = st.text_input("Note (optional)", key="perform_note")
 
@@ -630,89 +575,72 @@ with tabs[2]:
     if auto_advance and target:
         focus_by_label(target); st.session_state["_focus_target_label"] = ""
 
-    if assignment_id and assignee and st.button("Start / Renew 20-min Lock", use_container_width=True, key="perform_lock_btn"):
-        try:
-            ok, msg = start_or_renew_lock(assignment_id, assignee)
-            st.success(msg) if ok else st.warning(msg)
-            if ok: queue_feedback("success")
-        except Exception as e:
-            st.warning(f"Lock error: {e}"); queue_feedback("error")
+    # ---- Safe submit handler
+    def _handle_submit():
+        assignment_id = st.session_state.get("perform_assignment_id","")
+        assignee      = st.session_state.get("perform_assignee","")
+        location      = st.session_state.get("perform_location","")
+        pallet        = st.session_state.get("perform_pallet","")
+        sku           = st.session_state.get("perform_sku","")
+        lot           = st.session_state.get("perform_lot","")
+        note          = st.session_state.get("perform_note","")
+        counted_str   = st.session_state.get("perform_counted_str","")
+        counted_val   = _parse_count(counted_str)
+        expected_num  = st.session_state.get("perform_expected", 0)
 
-    if st.button("Submit Count", type="primary", key="perform_submit_btn", use_container_width=True):
         if not assignee or not location:
-            st.warning("Assignee and Location are required."); queue_feedback("error")
-        elif counted_val in (None, "invalid"):
-            st.warning("Enter a valid non-negative integer for Counted QTY."); queue_feedback("error")
-        else:
-            ok, why = validate_lock_for_submit(assignment_id, assignee)
-            if not ok:
-                st.error(why); queue_feedback("error")
-            else:
-                variance = counted_val - expected_num if expected_num is not None else ""
-                flag = "Match" if variance=="" or variance==0 else ("Over" if variance>0 else "Short")
-                row = {
-                    "submission_id": mk_id("CCS"),
-                    "assignment_id": assignment_id or "",
-                    "assignee": assignee.strip(),
-                    "location": location.strip(),
-                    "sku": sku.strip(),
-                    "lot_number": lot_normalize(lot),
-                    "pallet_id": pallet.strip(),
-                    "counted_qty": int(counted_val),
-                    "expected_qty": int(expected_num) if expected_num is not None else "",
-                    "variance": variance if variance != "" else "",
-                    "variance_flag": flag,
-                    "timestamp": now_str(),
-                    "device_id": "",
-                    "note": (note or "").strip(),
-                }
-                safe_append_csv(PATHS["subs"], row, SUBMIT_COLS)
-                dfA2 = load_assignments()
-                if assignment_id and not dfA2.empty:
-                    ix = dfA2.index[dfA2["assignment_id"]==assignment_id]
-                    if len(ix)>0:
-                        dfA2.loc[ix, "status"] = "Submitted"
-                        dfA2.loc[ix, ["lock_owner","lock_start_ts","lock_expires_ts"]] = ["","",""]
-                        save_assignments(dfA2)
-                st.success("Submitted"); queue_feedback("success")
-                st.session_state["perform_counted_str"] = ""
+            st.session_state["_submit_msg"] = ("warn","Assignee and Location are required."); return
+        if counted_val in (None, "invalid"):
+            st.session_state["_submit_msg"] = ("warn","Enter a valid non-negative integer for Counted QTY."); return
 
-    # Auto-submit path (unchanged)
-    if auto_submit and st.session_state.get("_auto_submit_try", False):
-        st.session_state["_auto_submit_try"] = False
-        if assignee and location and (counted_val not in (None, "invalid")):
-            ok, why = validate_lock_for_submit(assignment_id, assignee)
-            if ok:
-                variance = counted_val - expected_num if expected_num is not None else ""
-                flag = "Match" if variance=="" or variance==0 else ("Over" if variance>0 else "Short")
-                row = {
-                    "submission_id": mk_id("CCS"),
-                    "assignment_id": assignment_id or "",
-                    "assignee": assignee.strip(),
-                    "location": location.strip(),
-                    "sku": sku.strip(),
-                    "lot_number": lot_normalize(lot),
-                    "pallet_id": pallet.strip(),
-                    "counted_qty": int(counted_val),
-                    "expected_qty": int(expected_num) if expected_num is not None else "",
-                    "variance": variance if variance != "" else "",
-                    "variance_flag": flag,
-                    "timestamp": now_str(),
-                    "device_id": "",
-                    "note": (note or "").strip(),
-                }
-                safe_append_csv(PATHS["subs"], row, SUBMIT_COLS)
-                dfA2 = load_assignments()
-                if assignment_id and not dfA2.empty:
-                    ix = dfA2.index[dfA2["assignment_id"]==assignment_id]
-                    if len(ix)>0:
-                        dfA2.loc[ix, "status"] = "Submitted"
-                        dfA2.loc[ix, ["lock_owner","lock_start_ts","lock_expires_ts"]] = ["","",""]
-                        save_assignments(dfA2)
-                st.success("Submitted (auto)"); queue_feedback("success")
-                st.session_state["perform_counted_str"] = ""
-            else:
-                st.error(why); queue_feedback("error")
+        ok, why = validate_lock_for_submit(assignment_id, assignee)
+        if not ok:
+            st.session_state["_submit_msg"] = ("error", str(why)); return
+
+        variance = counted_val - expected_num if expected_num is not None else ""
+        flag = "Match" if variance=="" or variance==0 else ("Over" if variance>0 else "Short")
+        row = {
+            "submission_id": mk_id("CCS"),
+            "assignment_id": assignment_id or "",
+            "assignee": assignee.strip(),
+            "location": location.strip(),
+            "sku": sku.strip(),
+            "lot_number": lot_normalize(lot),
+            "pallet_id": pallet.strip(),
+            "counted_qty": int(counted_val),
+            "expected_qty": int(expected_num) if expected_num is not None else "",
+            "variance": variance if variance != "" else "",
+            "variance_flag": flag,
+            "timestamp": now_str(),
+            "device_id": "",
+            "note": (note or "").strip(),
+        }
+        safe_append_csv(PATHS["subs"], row, SUBMIT_COLS)
+
+        # Update assignment status to Submitted + clear lock
+        dfA2 = load_assignments()
+        if assignment_id and not dfA2.empty:
+            ix = dfA2.index[dfA2["assignment_id"]==assignment_id]
+            if len(ix)>0:
+                dfA2.loc[ix, "status"] = "Submitted"
+                dfA2.loc[ix, ["lock_owner","lock_start_ts","lock_expires_ts"]] = ["","",""]
+                save_assignments(dfA2)
+
+        st.session_state["_submit_msg"] = ("success","Submitted")
+        st.session_state["perform_counted_str"] = ""   # safe here in handler
+        queue_feedback("success")
+
+    st.button("Submit Count", type="primary", key="perform_submit_btn", use_container_width=True, on_click=_handle_submit)
+
+    # Show submit result and rerun to refresh UI
+    msg = st.session_state.pop("_submit_msg", None)
+    if msg:
+        level, text = msg
+        if level=="success": st.success(text)
+        elif level=="warn":  st.warning(text)
+        else:                st.error(text)
+        st.rerun()
+
     emit_feedback()
 
 # -------- Dashboard (Live)
@@ -753,7 +681,7 @@ with tabs[4]:
     show_table(ex_disp, height=300, key="grid_exceptions", numeric_cols=["variance"])
     st.download_button("Export Exceptions CSV", data=ex.to_csv(index=False), file_name="cyclecount_exceptions.csv", mime="text/csv", key="disc_export_btn")
 
-# -------- Settings (mapping defaults: saved -> session -> DEFAULT_MAPPING)
+# -------- Settings
 with tabs[5]:
     st.subheader("Settings")
     st.write("Environment variables (optional):")
@@ -783,7 +711,6 @@ AGGRID_ENABLED=<1 or 0>""", language="bash")
                 sheet = st.selectbox("Select sheet", xls.sheet_names, index=0, key="settings_sheet")
                 raw = pd.read_excel(xls, sheet_name=sheet, dtype=str).fillna("")
                 st.write("Preview (first 10 rows):"); st.dataframe(raw.head(10), use_container_width=True)
-            # Priority: saved mapping -> session mapping -> DEFAULT_MAPPING
             mapping_saved = load_inventory_mapping() or {}
             mapping_session = _get_session_mapping()
             base_map = {**DEFAULT_MAPPING, **mapping_session, **mapping_saved}
