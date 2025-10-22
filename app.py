@@ -232,7 +232,7 @@ with tabs[0]:
     with c_top1:
         assigned_by = st.text_input("Assigned by", value=st.session_state.get("assigned_by",""), key="assign_assigned_by")
     with c_top2:
-        assignee = st.text_input("Assign to (name"), value=st.session_state.get("assignee",""))
+        assignee = st.text_input("Assign to (name)", value=st.session_state.get("assignee",""), key="assign_assignee")
 
     c1,c2,c3 = st.columns(3)
     with c1: location = st.text_input("Location (scan or type)", key="assign_location")
@@ -492,4 +492,5 @@ with tabs[5]:
                 st.rerun()
         except Exception as e:
             st.warning(f"Excel load error: {e}")
+
 
