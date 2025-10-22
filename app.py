@@ -1,5 +1,5 @@
-﻿# v1.3.4 (My Assignments selection fix + auto-populate via rerun)
-# NOTE: Full file includes all prior features: mobile scan UX, sound/vibe (default ON), xlrd>=2.0.1, lock model, Supervisor Tools (delete assignments), AgGrid support, and no widget value/session conflicts.
+﻿# v1.3.5 (Remove Device ID; Counted QTY starts blank)
+# Keeps: mobile scan UX, sound/vibe default ON, AgGrid selection + rerun, Supervisor Tools (delete), xlrd>=2.0.1, locks, mapping.
 
 import os, time, uuid, re, json
 from datetime import datetime, timedelta
@@ -15,7 +15,7 @@ except Exception:
     _AGGRID_IMPORTED = False
 
 APP_NAME = "Cycle Counting"
-VERSION = "v1.3.4 (selection fix + auto-populate)"
+VERSION = "v1.3.5 (remove Device ID; blank Counted)"
 TZ_LABEL = "US/Central"
 LOCK_MINUTES_DEFAULT = 20
 LOCK_MINUTES = int(os.getenv("CC_LOCK_MINUTES", LOCK_MINUTES_DEFAULT))
@@ -51,6 +51,8 @@ ASSIGN_COLS = [
     "expected_qty","priority","status","created_ts","due_date","notes",
     "lock_owner","lock_start_ts","lock_expires_ts"
 ]
+# NOTE: SUBMIT_COLS still includes 'device_id' for CSV schema compatibility,
+# but we now write it as empty ("") since the UI no longer collects it.
 SUBMIT_COLS = [
     "submission_id","assignment_id","assignee","location","sku","lot_number","pallet_id",
     "counted_qty","expected_qty","variance","variance_flag","timestamp","device_id","note"
@@ -163,7 +165,7 @@ def inv_lookup_expected(location: str, sku: str="", lot: str="", pallet_id: str=
     df = inv
     for cond, _ in candidates:
         tmp = df.copy()
-        for k, v in cond.items():
+        for k,v in cond.items():
             if v != "":
                 tmp = tmp[tmp[k].astype(str).str.strip().str.lower() == str(v).strip().lower()]
         if not tmp.empty:
@@ -206,6 +208,7 @@ def validate_lock_for_submit(assignment_id: str, user: str) -> (bool, str):
     if lock_owned_by(r, user): return True, "Lock valid for user"
     return False, f"Locked by {r.get('lock_owner','?')} until {r.get('lock_expires_ts','?')}"
 
+# ---- UI helpers (mobile, haptics, sound)
 def inject_mobile_css(scale: float = 1.2):
     base_px = int(16 * scale)
     st.markdown(f"""
@@ -453,7 +456,7 @@ with tabs[1]:
                 label = f"{r.get('assignment_id','')} — {r.get('location','')} — {r.get('status','')}"
                 opts.append((label, r.get("assignment_id","")))
             if opts:
-                def _fmt(val): 
+                def _fmt(val):
                     for lbl, v in opts:
                         if v == val: return lbl
                     return val
@@ -509,10 +512,19 @@ with tabs[2]:
     default_expected = auto_expected if auto_expected is not None else (try_cur_exp if try_cur_exp is not None else 0)
     with c5:
         expected_num = st.number_input("Expected QTY (auto from Inventory if available)", min_value=0, value=int(default_expected), key="perform_expected")
-    counted = st.number_input("Counted QTY", min_value=0, step=1, key="perform_counted", on_change=_on_count_change)
-    device_id = st.text_input("Device ID (optional)", value=os.getenv("DEVICE_ID",""), key="perform_device_id")
+
+    # Counted QTY now starts blank using a text input (numeric validation + on_change)
+    counted_str = st.text_input("Counted QTY", value=st.session_state.get("perform_counted_str",""), placeholder="Scan/enter count", key="perform_counted_str", on_change=_on_count_change)
+    def _parse_count(s):
+        s = (s or "").strip()
+        if s == "": return None
+        if not re.fullmatch(r"\d+", s): return "invalid"
+        return int(s)
+    counted_val = _parse_count(counted_str)
+
     note = st.text_input("Note (optional)", key="perform_note")
 
+    # Auto-focus flow
     if auto_focus and not st.session_state.get("_did_autofocus"):
         focus_by_label("Scan Location"); st.session_state["_did_autofocus"] = True
     target = st.session_state.get("_focus_target_label","")
@@ -527,15 +539,18 @@ with tabs[2]:
         except Exception as e:
             st.warning(f"Lock error: {e}"); queue_feedback("error")
 
+    # Submit button with validation for blank/invalid counted
     if st.button("Submit Count", type="primary", key="perform_submit_btn", use_container_width=True):
         if not assignee or not location:
             st.warning("Assignee and Location are required."); queue_feedback("error")
+        elif counted_val in (None, "invalid"):
+            st.warning("Enter a valid non-negative integer for Counted QTY."); queue_feedback("error")
         else:
             ok, why = validate_lock_for_submit(assignment_id, assignee)
             if not ok:
                 st.error(why); queue_feedback("error")
             else:
-                variance = counted - expected_num if expected_num is not None else ""
+                variance = counted_val - expected_num if expected_num is not None else ""
                 flag = "Match" if variance=="" or variance==0 else ("Over" if variance>0 else "Short")
                 row = {
                     "submission_id": mk_id("CCS"),
@@ -545,12 +560,12 @@ with tabs[2]:
                     "sku": sku.strip(),
                     "lot_number": lot_normalize(lot),
                     "pallet_id": pallet.strip(),
-                    "counted_qty": int(counted),
+                    "counted_qty": int(counted_val),
                     "expected_qty": int(expected_num) if expected_num is not None else "",
                     "variance": variance if variance != "" else "",
                     "variance_flag": flag,
                     "timestamp": now_str(),
-                    "device_id": device_id or "",
+                    "device_id": "",  # kept for schema; UI removed
                     "note": (note or "").strip(),
                 }
                 safe_append_csv(PATHS["subs"], row, SUBMIT_COLS)
@@ -562,13 +577,16 @@ with tabs[2]:
                         dfA2.loc[ix, ["lock_owner","lock_start_ts","lock_expires_ts"]] = ["","",""]
                         save_assignments(dfA2)
                 st.success("Submitted"); queue_feedback("success")
+                # clear counted field after submit
+                st.session_state["perform_counted_str"] = ""
 
-    if st.session_state.get("auto_submit", False) and st.session_state.get("_auto_submit_try", False):
+    # Auto-submit path when enabled and counted changed
+    if auto_submit and st.session_state.get("_auto_submit_try", False):
         st.session_state["_auto_submit_try"] = False
-        if assignee and location:
+        if assignee and location and (counted_val not in (None, "invalid")):
             ok, why = validate_lock_for_submit(assignment_id, assignee)
             if ok:
-                variance = counted - expected_num if expected_num is not None else ""
+                variance = counted_val - expected_num if expected_num is not None else ""
                 flag = "Match" if variance=="" or variance==0 else ("Over" if variance>0 else "Short")
                 row = {
                     "submission_id": mk_id("CCS"),
@@ -578,12 +596,12 @@ with tabs[2]:
                     "sku": sku.strip(),
                     "lot_number": lot_normalize(lot),
                     "pallet_id": pallet.strip(),
-                    "counted_qty": int(counted),
+                    "counted_qty": int(counted_val),
                     "expected_qty": int(expected_num) if expected_num is not None else "",
                     "variance": variance if variance != "" else "",
                     "variance_flag": flag,
                     "timestamp": now_str(),
-                    "device_id": device_id or "",
+                    "device_id": "",
                     "note": (note or "").strip(),
                 }
                 safe_append_csv(PATHS["subs"], row, SUBMIT_COLS)
@@ -595,6 +613,7 @@ with tabs[2]:
                         dfA2.loc[ix, ["lock_owner","lock_start_ts","lock_expires_ts"]] = ["","",""]
                         save_assignments(dfA2)
                 st.success("Submitted (auto)"); queue_feedback("success")
+                st.session_state["perform_counted_str"] = ""
             else:
                 st.error(why); queue_feedback("error")
 
