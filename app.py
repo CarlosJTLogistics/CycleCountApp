@@ -776,3 +776,4 @@ with tabs[6]:
                 st.success(f"Saved mapping and cached {len(norm):,} rows."); st.rerun()
         except Exception as e:
             st.warning(f"Excel load error: {e}")
+
