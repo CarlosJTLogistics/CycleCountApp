@@ -12,7 +12,7 @@ except Exception:
 
 # ========= App meta =========
 APP_NAME = "Cycle Counting"
-VERSION = "v1.2.0 (assignment safety + webhook payload + multiselect)"
+VERSION = "v1.2.1 (assignment safety, no webhook)"
 TZ_LABEL = "US/Central"
 LOCK_MINUTES_DEFAULT = 20
 LOCK_MINUTES = int(os.getenv("CC_LOCK_MINUTES", LOCK_MINUTES_DEFAULT))
@@ -232,28 +232,7 @@ def show_table(df, height=300, key=None, selectable=False, selection_mode="singl
     st.dataframe(df, use_container_width=True, height=height)
     return {"selected_rows": []}
 
-def emit_webhook(event: str, payload: dict):
-    """
-    Posts a JSON payload to CC_WEBHOOK_URL (or WEBHOOK_URL) if set.
-    Returns (ok: bool, msg: str). Writes errors to logs/webhook_errors.log.
-    """
-    url = os.getenv("CC_WEBHOOK_URL") or os.getenv("WEBHOOK_URL") or ""
-    if not url:
-        return False, "No webhook URL set"
-    try:
-        import json, urllib.request
-        data = json.dumps({"event": event, "source": APP_NAME, "version": VERSION, "payload": payload}).encode("utf-8")
-        req = urllib.request.Request(url, data=data, headers={"Content-Type":"application/json"})
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            _ = resp.read()
-        return True, "ok"
-    except Exception as e:
-        try:
-            with open(os.path.join(PATHS["root"], "webhook_errors.log"), "a", encoding="utf-8") as f:
-                f.write(f"{now_str()} | {event} | {e}\n")
-        except Exception:
-            pass
-        return False, str(e)
+
 # ========= App UI =========
 st.set_page_config(page_title=f"{APP_NAME} {VERSION}", layout="wide")
 st.title(f"{APP_NAME} ({VERSION})")
@@ -409,8 +388,7 @@ with tabs[0]:
 
             # Webhook summary payload (best-effort; non-blocking)
             try:
-                emit_webhook("assignment_created", {
-                    "assigned_by": assigned_by.strip(),
+,
                     "assignee": assignee.strip(),
                     "notes": notes.strip(),
                     "locations_submitted": loc_merge,
@@ -629,5 +607,6 @@ with tabs[5]:
                 st.rerun()
         except Exception as e:
             st.warning(f"Excel load error: {e}")
+
 
 
