@@ -13,7 +13,7 @@ except Exception:
 
 # ========= App meta =========
 APP_NAME = "Cycle Counting"
-VERSION = "v1.3.1 (mobile scan UX + haptics/sound; xlrd fix)"
+VERSION = "v1.3.2 (defaults: sound/vibe ON; widget-state fix; mobile scan UX)"
 TZ_LABEL = "US/Central"
 LOCK_MINUTES_DEFAULT = 20
 LOCK_MINUTES = int(os.getenv("CC_LOCK_MINUTES", LOCK_MINUTES_DEFAULT))
@@ -212,15 +212,9 @@ def inject_mobile_css(scale: float = 1.2):
     base_px = int(16 * scale)
     st.markdown(f"""
     <style>
-    .stTextInput input, .stNumberInput input {{
-        font-size: {base_px}px !important; padding: 12px 14px !important;
-    }}
-    .stButton > button {{
-        font-size: {base_px}px !important; padding: 12px 16px !important; width: 100% !important;
-    }}
-    .stSelectbox, .stMultiselect, .stTextArea textarea {{
-        font-size: {base_px}px !important;
-    }}
+    .stTextInput input, .stNumberInput input {{ font-size: {base_px}px !important; padding: 12px 14px !important; }}
+    .stButton > button {{ font-size: {base_px}px !important; padding: 12px 16px !important; width: 100% !important; }}
+    .stSelectbox, .stMultiselect, .stTextArea textarea {{ font-size: {base_px}px !important; }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -242,13 +236,14 @@ def focus_by_label(label_text: str):
 def queue_feedback(kind: str):
     st.session_state["_feedback_kind"] = kind
 
-def emit_feedback(enable_sound: bool, enable_vibe: bool):
+def emit_feedback():
+    enable_sound = st.session_state.get("fb_sound", True)
+    enable_vibe = st.session_state.get("fb_vibe", True)
     kind = st.session_state.pop("_feedback_kind", "")
     if not kind: return
     snd = "true" if enable_sound else "false"
     vib = "true" if enable_vibe else "false"
     nonce = uuid.uuid4().hex
-    # WebAudio + Vibration API (best-effort; device/browser dependent)
     components.html(f"""
     <script>
     (function(){{
@@ -270,18 +265,9 @@ def emit_feedback(enable_sound: bool, enable_vibe: bool):
       function vibrate(seq) {{ try {{ if (navigator.vibrate) navigator.vibrate(seq); }} catch(e) {{}} }}
       let tone=[], vib=[];
       switch("{kind}") {{
-        case "scan":
-          tone = [{{f:1000,d:60}}, {{f:1200,d:60}}];
-          vib = [40, 20, 40];
-          break;
-        case "success":
-          tone = [{{f:880,d:120}}, {{f:1320,d:120}}];
-          vib = [70, 30, 70];
-          break;
-        case "error":
-          tone = [{{f:220,d:220, type:'square'}}, {{f:180,d:180, type:'square'}}];
-          vib = [200, 100, 200];
-          break;
+        case "scan":    tone=[{{f:1000,d:60}},{{f:1200,d:60}}]; vib=[40,20,40]; break;
+        case "success": tone=[{{f:880,d:120}},{{f:1320,d:120}}]; vib=[70,30,70]; break;
+        case "error":   tone=[{{f:220,d:220,type:'square'}},{{f:180,d:180,type:'square'}}]; vib=[200,100,200]; break;
       }}
       if (enableSound && tone.length) beep(tone);
       if (enableVibe && vib.length) vibrate(vib);
@@ -314,18 +300,27 @@ def show_table(df, height=300, key=None, selectable=False, selection_mode="singl
 st.set_page_config(page_title=f"{APP_NAME} {VERSION}", layout="wide")
 st.title(f"{APP_NAME} ({VERSION})")
 
-# Global Mobile Mode toggle + feedback toggles
-if "mobile_mode" not in st.session_state:
-    st.session_state["mobile_mode"] = True
+# ---- Session defaults (avoid widget value + session_state conflicts)
+def _ensure_default(k, v):
+    if k not in st.session_state: st.session_state[k] = v
+_ensure_default("mobile_mode", True)
+_ensure_default("fb_sound", True)
+_ensure_default("fb_vibe", True)
+_ensure_default("auto_focus", True)
+_ensure_default("auto_advance", True)
+_ensure_default("auto_submit", False)
+
+# Global toggles (no value=, rely on session_state only)
 top1, top2, top3 = st.columns(3)
 with top1:
-    st.toggle("Mobile Mode (scan gun)", value=st.session_state["mobile_mode"], key="mobile_mode", help="Larger touch targets + simplified tables")
+    st.toggle("Mobile Mode (scan gun)", key="mobile_mode", help="Larger touch targets + simplified tables")
 with top2:
-    enable_sound = st.checkbox("Sound feedback", value=True, key="fb_sound")
+    st.checkbox("Sound feedback", key="fb_sound")
 with top3:
-    enable_vibe = st.checkbox("Vibration feedback", value=True, key="fb_vibe")
+    st.checkbox("Vibration feedback", key="fb_vibe")
 
-if st.session_state.get("mobile_mode", False):
+# Apply mobile CSS if enabled
+if st.session_state.get("mobile_mode", True):
     inject_mobile_css(scale=1.2)
 
 st.caption(f"Active log dir: {PATHS['root']} · Timezone: {TZ_LABEL} · Lock: {LOCK_MINUTES} min")
@@ -404,7 +399,7 @@ with tabs[0]:
                 created += 1
             st.session_state["assigned_by"] = assigned_by
             st.session_state["assignee"] = assignee
-            if created > 0: st.success(f"Created {created} assignment(s) for {assignee}.")
+            if created > 0: st.success(f"Created {created} assignment(s) for {assignee}."); queue_feedback("success")
             if dup_conflicts: st.warning(f"Skipped {len(dup_conflicts)} duplicate location(s) already Assigned/In Progress: {', '.join(map(str, dup_conflicts[:10]))}{'…' if len(dup_conflicts)>10 else ''}")
             if locked_conflicts: st.warning(f"Skipped {len(locked_conflicts)} location(s) currently locked by another user.")
             if not_in_cache: st.info(f"{len(not_in_cache)} location(s) not in inventory cache (FYI): {', '.join(map(str, not_in_cache[:10]))}{'…' if len(not_in_cache)>10 else ''}")
@@ -454,11 +449,15 @@ with tabs[1]:
 with tabs[2]:
     st.subheader("Perform Count")
 
-    # Scan UX toggles
+    # Scan UX toggles (no value=; rely on session_state defaults)
     t1, t2, t3 = st.columns(3)
-    with t1: auto_focus = st.checkbox("Auto-focus Location", value=True, key="auto_focus")
-    with t2: auto_advance = st.checkbox("Auto-advance after scan", value=True, key="auto_advance")
-    with t3: auto_submit = st.checkbox("Auto-submit after Counted", value=False, key="auto_submit")
+    with t1: st.checkbox("Auto-focus Location", key="auto_focus")
+    with t2: st.checkbox("Auto-advance after scan", key="auto_advance")
+    with t3: st.checkbox("Auto-submit after Counted", key="auto_submit")
+
+    auto_focus  = st.session_state.get("auto_focus", True)
+    auto_advance= st.session_state.get("auto_advance", True)
+    auto_submit = st.session_state.get("auto_submit", False)
 
     cur = st.session_state.get("current_assignment", {})
     assignment_id = st.text_input("Assignment ID", value=cur.get("assignment_id",""), key="perform_assignment_id")
@@ -496,14 +495,12 @@ with tabs[2]:
     device_id = st.text_input("Device ID (optional)", value=os.getenv("DEVICE_ID",""), key="perform_device_id")
     note = st.text_input("Note (optional)", key="perform_note")
 
-    # Focus behavior
     if auto_focus and not st.session_state.get("_did_autofocus"):
         focus_by_label("Scan Location"); st.session_state["_did_autofocus"] = True
     target = st.session_state.get("_focus_target_label","")
     if auto_advance and target:
         focus_by_label(target); st.session_state["_focus_target_label"] = ""
 
-    # Lock control
     if assignment_id and assignee and st.button("Start / Renew 20-min Lock", use_container_width=True, key="perform_lock_btn"):
         try:
             ok, msg = start_or_renew_lock(assignment_id, assignee)
@@ -512,7 +509,6 @@ with tabs[2]:
         except Exception as e:
             st.warning(f"Lock error: {e}"); queue_feedback("error")
 
-    # Manual submit
     if st.button("Submit Count", type="primary", key="perform_submit_btn", use_container_width=True):
         if not assignee or not location:
             st.warning("Assignee and Location are required."); queue_feedback("error")
@@ -549,7 +545,6 @@ with tabs[2]:
                         save_assignments(dfA2)
                 st.success("Submitted"); queue_feedback("success")
 
-    # Auto-submit option
     if auto_submit and st.session_state.get("_auto_submit_try", False):
         st.session_state["_auto_submit_try"] = False
         if assignee and location:
@@ -586,7 +581,7 @@ with tabs[2]:
                 st.error(why); queue_feedback("error")
 
     # Emit client feedback (sound/vibration) if queued
-    emit_feedback(enable_sound, enable_vibe)
+    emit_feedback()
 
 # ---------- Dashboard (Live) ----------
 with tabs[3]:
@@ -596,7 +591,7 @@ with tabs[3]:
     st.caption(f"Submissions file: {subs_path}")
     dfS = load_submissions()
     dfS_disp = dfS.copy()
-    if st.session_state.get("mobile_mode", False) and not dfS_disp.empty:
+    if st.session_state.get("mobile_mode", True) and not dfS_disp.empty:
         keep = [c for c in ["timestamp","assignee","location","counted_qty","expected_qty","variance","variance_flag"] if c in dfS_disp.columns]
         if keep: dfS_disp = dfS_disp[keep]
     today_str = datetime.now().strftime("%m/%d/%Y")
@@ -619,7 +614,7 @@ with tabs[4]:
     dfS = load_submissions()
     ex = dfS[dfS["variance_flag"].isin(["Over","Short"])]
     ex_disp = ex.copy()
-    if st.session_state.get("mobile_mode", False) and not ex_disp.empty:
+    if st.session_state.get("mobile_mode", True) and not ex_disp.empty:
         keep = [c for c in ["timestamp","assignee","location","counted_qty","expected_qty","variance","variance_flag","note"] if c in ex_disp.columns]
         if keep: ex_disp = ex_disp[keep]
     st.write("Exceptions")
