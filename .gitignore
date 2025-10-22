@@ -1,0 +1,15 @@
+﻿# Bytecode / cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+# Env & local
+.env
+.venv/
+# Streamlit secrets
+.streamlit/secrets.toml
+# OS
+.DS_Store
+Thumbs.db
+# Logs
+logs/

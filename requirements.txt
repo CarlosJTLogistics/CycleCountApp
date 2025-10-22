@@ -1,0 +1,5 @@
+﻿streamlit
+pandas
+st-aggrid
+openpyxl
+xlrd
