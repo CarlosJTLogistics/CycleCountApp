@@ -219,7 +219,7 @@ except Exception:
  _AGGRID_IMPORTED = False
 
 APP_NAME = "Cycle Counting"
-VERSION = "v1.6.0 (TZ fix + reset+return + CSV download)"
+VERSION = "v1.6.1 (hide submitted in My Assignments + show Notes in Dashboard)"
 TZ_NAME = os.getenv("CC_TZ", "America/Chicago")
 TZ_LABEL = TZ_NAME
 LOCK_MINUTES_DEFAULT = 20
@@ -636,7 +636,7 @@ with tabs[1]:
  st.subheader(t("my_title"))
  me = st.text_input(t("i_am"), key="me_name", value=st.session_state.get("assignee",""))
  dfA = load_assignments()
- mine = dfA[dfA["assignee"].str.lower() == (me or "").lower()] if me else dfA.iloc[0:0]
+ mine = (dfA[(dfA["assignee"].str.lower() == (me or "").lower()) & (dfA["status"] != "Submitted")] if me else dfA.iloc[0:0])
  cA, cB, cC, cD = st.columns(4)
  cA.metric(t("open"), int((mine["status"]=="Assigned").sum()))
  cB.metric(t("in_progress"), int((mine["status"]=="In Progress").sum()))
@@ -849,8 +849,7 @@ with tabs[3]:
 
  dfS_disp = dfS.copy()
  if st.session_state.get("mobile_mode", True) and not dfS_disp.empty:
-  keep = [c for c in ["timestamp","assignee","location","counted_qty","expected_qty","variance","variance_flag"] if c in dfS_disp.columns]
-  if keep: dfS_disp = dfS_disp[keep]
+  keep = [c for c in ["timestamp","assignee","location","counted_qty","expected_qty","variance","variance_flag","note"] if c in dfS_disp.columns]\n if keep: dfS_disp = dfS_disp[keep]
  today_str = now_local().strftime("%m/%d/%Y")
  today_df = dfS[dfS["timestamp"].str.contains(today_str)] if not dfS.empty else dfS
  c1,c2,c3,c4 = st.columns(4)
@@ -941,3 +940,6 @@ CC_TZ=<IANA TZ, e.g. America/Chicago>""", language="bash")
     st.success(f"Saved mapping and cached {len(norm):,} rows."); st.rerun()
   except Exception as e:
    st.warning(t("excel_err", err=e))
+
+
+
