@@ -242,58 +242,106 @@ tabs = st.tabs(["Assign Counts","My Assignments","Perform Count","Dashboard (Liv
 # ---------- Assign Counts ----------
 with tabs[0]:
     st.subheader("Assign Counts")
+    # --- Who's assigning / who gets it ---
     c_top1, c_top2 = st.columns(2)
     with c_top1:
         assigned_by = st.text_input("Assigned by", value=st.session_state.get("assigned_by",""), key="assign_assigned_by")
     with c_top2:
         assignee = st.text_input("Assign to (name)", value=st.session_state.get("assignee",""), key="assign_assignee")
 
-    c1,c2,c3 = st.columns(3)
-    with c1:
-        location = st.text_input("Location (scan or type)", key="assign_location")
-    with c2:
-        sku = st.text_input("SKU (optional)", key="assign_sku")
-    with c3:
-        lot = st.text_input("LOT Number (optional)", value="", help="Digits only; will be normalized", key="assign_lot")
+    # --- Location chooser (multi-select) + paste list ---
+    inv_df = load_cached_inventory()
+    loc_options = []
+    if inv_df is not None and hasattr(inv_df, "empty") and not inv_df.empty and "location" in inv_df.columns:
+        loc_options = sorted(inv_df["location"].astype(str).str.strip().replace("nan","").dropna().unique().tolist())
 
-    c4,c5,c6 = st.columns(3)
-    with c4:
-        pallet = st.text_input("Pallet ID (optional)", key="assign_pallet")
-    with c5:
-        expected = st.number_input("Expected QTY (optional)", min_value=0, value=0, key="assign_expected")
-    with c6:
-        priority = st.selectbox("Priority", ["Normal","High","Low"], index=0, key="assign_priority")
+    st.caption("Select one or more locations from the list, or paste a list (one per line). Other fields will auto-populate from your inventory cache.")
+    colL, colR = st.columns([1.2, 1])
 
-    due_date = st.date_input("Due date", value=date.today(), key="assign_due_date")
-    notes = st.text_area("Notes (optional)", height=80, key="assign_notes")
+    with colL:
+        selected_locs = st.multiselect(
+            "Locations",
+            options=loc_options,
+            default=[],
+            help="Search by typing; select multiple.",
+            key="assign_locations_multiselect"
+        )
+        pasted = st.text_area(
+            "Paste locations (optional)",
+            value="",
+            height=120,
+            key="assign_locations_paste",
+            placeholder="e.g.\n11400804\n11400805\nTUN01001"
+        )
+        # Merge selections + pasted (dedupe, keep selection order first)
+        pasted_list = [ln.strip() for ln in pasted.splitlines() if ln.strip()] if pasted else []
+        # Preserve order: selected first, then pasted uniques not already picked
+        seen = set()
+        loc_merge = []
+        for s in selected_locs + pasted_list:
+            if s not in seen:
+                loc_merge.append(s); seen.add(s)
 
-    if st.button("Create Assignment", type="primary", key="assign_create_btn"):
-        if not assigned_by or not assignee or not location:
-            st.warning("Assigned by, Assignee, and Location are required.")
-        else:
-            row = {
-                "assignment_id": mk_id("CC"),
-                "assigned_by": assigned_by.strip(),
-                "assignee": assignee.strip(),
-                "location": location.strip(),
-                "sku": sku.strip(),
-                "lot_number": lot_normalize(lot),
-                "pallet_id": pallet.strip(),
-                "expected_qty": str(expected or ""),
-                "priority": priority,
-                "status": "Assigned",
-                "created_ts": now_str(),
-                "due_date": due_date.strftime("%Y-%m-%d"),
-                "notes": notes.strip(),
-                "lock_owner": "",
-                "lock_start_ts": "",
-                "lock_expires_ts": "",
-            }
-            safe_append_csv(PATHS["assign"], row, ASSIGN_COLS)
-            st.session_state["assigned_by"]=assigned_by
-            st.session_state["assignee"]=assignee
-            st.success(f"Assignment created for {assignee} at {location}")
+        notes = st.text_area(
+            "Notes (optional)",
+            value="",
+            height=80,
+            key="assign_notes",
+            placeholder="Any special instructions for the counter..."
+        )
 
+        # Create one assignment per location (auto-fill details from inventory if present)
+        disabled = (not assigned_by) or (not assignee) or (len(loc_merge) == 0)
+        if st.button("Create Assignments", type="primary", disabled=disabled, key="assign_create_btn"):
+            if not assigned_by or not assignee:
+                st.warning("Assigned by and Assignee are required.")
+            elif len(loc_merge) == 0:
+                st.warning("Pick at least one location.")
+            else:
+                created = 0
+                for loc in loc_merge:
+                    sku = lot_num = pallet = expected = ""
+                    if inv_df is not None and hasattr(inv_df, "empty") and not inv_df.empty:
+                        cand = inv_df[inv_df["location"].astype(str).str.strip().str.lower() == str(loc).strip().lower()]
+                        if not cand.empty:
+                            # Use the first matching row
+                            r = cand.iloc[0]
+                            sku = str(r.get("sku","")).strip()
+                            lot_num = lot_normalize(r.get("lot_number",""))
+                            pallet = str(r.get("pallet_id","")).strip()
+                            expected_val = r.get("expected_qty","")
+                            try:
+                                expected = str(int(float(expected_val))) if str(expected_val) != "" else ""
+                            except Exception:
+                                expected = str(expected_val) if str(expected_val) != "" else ""
+
+                    row = {
+                        "assignment_id": mk_id("CC"),
+                        "assigned_by": assigned_by.strip(),
+                        "assignee": assignee.strip(),
+                        "location": str(loc).strip(),
+                        "sku": sku,
+                        "lot_number": lot_num,
+                        "pallet_id": pallet,
+                        "expected_qty": expected,
+                        "priority": "Normal",         # keep column; default value
+                        "status": "Assigned",
+                        "created_ts": now_str(),
+                        "due_date": "",               # removed from UI; leave blank in file
+                        "notes": notes.strip(),
+                        "lock_owner": "",
+                        "lock_start_ts": "",
+                        "lock_expires_ts": ""
+                    }
+                    safe_append_csv(PATHS["assign"], row, ASSIGN_COLS)
+                    created += 1
+
+                # remember names for convenience
+                st.session_state["assigned_by"] = assigned_by
+                st.session_state["assignee"] = assignee
+                st.success(f"Created {created} assignment(s) for {assignee}.")
+
+    # --- Existing assignment table remains ---
     st.divider()
     dfA = load_assignments()
     if not dfA.empty:
@@ -309,8 +357,6 @@ with tabs[0]:
         show_table(dfA_disp, height=300, key="grid_all_assign")
     else:
         st.info("No assignments yet.")
-
-# ---------- My Assignments ----------
 with tabs[1]:
     st.subheader("My Assignments")
     me = st.text_input("I am (name)", key="me_name", value=st.session_state.get("assignee",""))
