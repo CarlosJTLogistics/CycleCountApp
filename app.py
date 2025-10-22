@@ -1,4 +1,4 @@
-# v1.3.7 (escape f-string braces; Supervisor Tools removed; Settings loads)
+ï»¿# v1.4.0 (encoding fallback for CSV; baked-in default mapping; Supervisor Tools removed; debounce fix; session mapping memory)
 import os, time, uuid, re, json
 from datetime import datetime, timedelta
 import pandas as pd
@@ -13,11 +13,20 @@ except Exception:
     _AGGRID_IMPORTED = False
 
 APP_NAME = "Cycle Counting"
-VERSION = "v1.3.7 (fix f-strings; no Supervisor Tools)"
+VERSION = "v1.4.0 (encoding fix + default mapping)"
 TZ_LABEL = "US/Central"
 LOCK_MINUTES_DEFAULT = 20
 LOCK_MINUTES = int(os.getenv("CC_LOCK_MINUTES", LOCK_MINUTES_DEFAULT))
 TS_FMT = "%m/%d/%Y %I:%M:%S %p"
+
+# ---------- Defaults (requested by Carlos)
+DEFAULT_MAPPING = {
+    "location": "Location Name",
+    "sku": "WarehouseSKU",
+    "lot_number": "CustomerLotReference",
+    "pallet_id": "PalletID",
+    "expected_qty": "QTY Available",
+}
 
 def lot_normalize(x: str) -> str:
     if x is None or (isinstance(x,float) and pd.isna(x)): return ""
@@ -56,6 +65,26 @@ SUBMIT_COLS = [
     "counted_qty","expected_qty","variance","variance_flag","timestamp","device_id","note"
 ]
 
+# ---------- CSV helpers (encoding fallback)
+_ENCODINGS = ["utf-8", "cp1252", "latin-1"]
+
+def read_csv_fallback(fp, dtype=str):
+    last_err = None
+    for enc in _ENCODINGS:
+        try:
+            return pd.read_csv(fp, dtype=dtype, encoding=enc).fillna("")
+        except Exception as e:
+            last_err = e
+            continue
+    # If still failing, try errors='replace' with latin-1
+    try:
+        return pd.read_csv(fp, dtype=dtype, encoding="latin-1", on_bad_lines="skip").fillna("")
+    except Exception as e2:
+        raise last_err or e2
+
+def dataframe_to_csv_utf8(df: pd.DataFrame, out_path: str):
+    df.to_csv(out_path, index=False, encoding="utf-8")
+
 def safe_append_csv(path, row: dict, columns: list):
     exists = os.path.exists(path)
     df = pd.DataFrame([row], columns=columns)
@@ -73,7 +102,7 @@ def read_csv_locked(path, columns=None):
     if not os.path.exists(path): return pd.DataFrame(columns=columns or [])
     for _ in range(5):
         try:
-            return pd.read_csv(path, dtype=str).fillna("")
+            return read_csv_fallback(path, dtype=str)
         except Exception:
             time.sleep(0.1)
     return pd.DataFrame(columns=columns or [])
@@ -93,16 +122,17 @@ def load_assignments():
 def save_assignments(df: pd.DataFrame):
     for c in ASSIGN_COLS:
         if c not in df.columns: df[c] = ""
-    df[ASSIGN_COLS].to_csv(PATHS["assign"], index=False, encoding="utf-8")
+    dataframe_to_csv_utf8(df[ASSIGN_COLS], PATHS["assign"])
 
 def load_submissions(): return read_csv_locked(PATHS["subs"], SUBMIT_COLS)
 
+# ---------- Inventory cache & mapping
 def load_cached_inventory() -> pd.DataFrame:
     if "inv_df" in st.session_state:
         return st.session_state["inv_df"]
     if os.path.exists(PATHS["inv_csv"]):
         try:
-            inv = pd.read_csv(PATHS["inv_csv"], dtype=str).fillna("")
+            inv = read_csv_fallback(PATHS["inv_csv"], dtype=str).fillna("")
             st.session_state["inv_df"] = inv
             return inv
         except Exception:
@@ -110,7 +140,7 @@ def load_cached_inventory() -> pd.DataFrame:
     return pd.DataFrame(columns=["location","sku","lot_number","pallet_id","expected_qty"])
 
 def save_inventory_cache(df: pd.DataFrame):
-    df.to_csv(PATHS["inv_csv"], index=False, encoding="utf-8")
+    dataframe_to_csv_utf8(df, PATHS["inv_csv"])
     st.session_state["inv_df"] = df
 
 def save_inventory_mapping(mapping: dict):
@@ -127,11 +157,11 @@ def load_inventory_mapping() -> dict:
 
 def normalize_inventory_df(df: pd.DataFrame, mapping: dict) -> pd.DataFrame:
     out = pd.DataFrame()
-    out["location"] = df[mapping.get("location","")].astype(str) if mapping.get("location","") in df.columns else ""
-    out["sku"] = df[mapping.get("sku","")].astype(str) if mapping.get("sku","") in df.columns else ""
+    out["location"]   = df[mapping.get("location","")].astype(str)    if mapping.get("location","")    in df.columns else ""
+    out["sku"]        = df[mapping.get("sku","")].astype(str)         if mapping.get("sku","")         in df.columns else ""
     lot_col = mapping.get("lot_number","")
-    out["lot_number"] = df[lot_col].astype(str).map(lot_normalize) if lot_col in df.columns else ""
-    out["pallet_id"] = df[mapping.get("pallet_id","")].astype(str) if mapping.get("pallet_id","") in df.columns else ""
+    out["lot_number"] = df[lot_col].astype(str).map(lot_normalize)    if lot_col                        in df.columns else ""
+    out["pallet_id"]  = df[mapping.get("pallet_id","")].astype(str)   if mapping.get("pallet_id","")   in df.columns else ""
     qty_col = mapping.get("expected_qty","")
     if qty_col in df.columns:
         q = pd.to_numeric(df[qty_col], errors="coerce").fillna("").astype(str)
@@ -168,8 +198,10 @@ def inv_lookup_expected(location: str, sku: str="", lot: str="", pallet_id: str=
                 tmp = tmp[tmp[k].astype(str).str.strip().str.lower() == str(v).strip().lower()]
         if not tmp.empty:
             for val in tmp["expected_qty"].tolist():
-                try: return int(float(val))
-                except Exception: continue
+                try:
+                    return int(float(val))
+                except Exception:
+                    continue
     return None
 
 def lock_active(row: pd.Series) -> bool:
@@ -205,7 +237,6 @@ def validate_lock_for_submit(assignment_id: str, user: str) -> (bool, str):
     return False, f"Locked by {r.get('lock_owner','?')} until {r.get('lock_expires_ts','?')}"
 
 # -------- UI helpers (mobile, haptics, sound)
-
 def inject_mobile_css(scale: float = 1.2):
     base_px = int(16 * scale)
     st.markdown(f"""
@@ -227,7 +258,7 @@ def focus_by_label(label_text: str):
                 const inp=lab.parentElement.querySelector('input,textarea');
                 if(inp){{{{ inp.focus(); if(inp.select) inp.select(); }}}}
             }}}}
-        }} , 150);
+        }}}}, 150);
         </script>
     """, height=0)
 
@@ -306,18 +337,22 @@ _ensure_default("auto_focus", True)
 _ensure_default("auto_advance", True)
 _ensure_default("auto_submit", False)
 
-# Top toggles
-_top1, _top2, _top3 = st.columns(3)
-with _top1:
-    st.toggle("Mobile Mode (scan gun)", key="mobile_mode", help="Larger touch targets + simplified tables")
-with _top2:
-    st.checkbox("Sound feedback", key="fb_sound")
-with _top3:
-    st.checkbox("Vibration feedback", key="fb_vibe")
-if st.session_state.get("mobile_mode", True):
-    inject_mobile_css(scale=1.2)
+# ---------------- Session-only mapping helpers ----------------
+def _get_session_mapping():
+    return st.session_state.get("map_defaults", {})
 
-st.caption(f"Active log dir: {PATHS['root']} · Timezone: {TZ_LABEL} · Lock: {LOCK_MINUTES} min")
+def _set_session_mapping(mapping: dict):
+    st.session_state["map_defaults"] = {
+        "location": mapping.get("location",""),
+        "sku": mapping.get("sku",""),
+        "lot_number": mapping.get("lot_number",""),
+        "pallet_id": mapping.get("pallet_id",""),
+        "expected_qty": mapping.get("expected_qty",""),
+    }
+
+st.caption("Tip: Select an assignment once. We load it without looping; re-select a different row to change.")
+
+st.caption(f"Active log dir: {PATHS['root']} Â· Timezone: {TZ_LABEL} Â· Lock: {LOCK_MINUTES} min")
 
 # Tabs (Supervisor Tools removed)
 tabs = st.tabs(["Assign Counts","My Assignments","Perform Count","Dashboard (Live)","Discrepancies","Settings"])
@@ -364,7 +399,7 @@ with tabs[0]:
                         not_in_cache.append(str(loc).strip())
                 is_dup = False
                 if dfA is not None and not dfA.empty:
-                    cand = dfA[(dfA["location"].astype(str).str.strip().str.lower() == str(loc).strip().lower()) & (dfA["status"].isin(["Assigned","In Progress"]))]
+                    cand = dfA[(dfA["location"].astype(str).str.strip().str.lower() == str(loc).strip().lower()) & (dfA["status"].isin(["Assigned","In Progress"]))] 
                     is_dup = not cand.empty
                 if is_dup: dup_conflicts.append(loc); continue
                 if _any_lock_active_for(loc): locked_conflicts.append(loc); continue
@@ -393,9 +428,9 @@ with tabs[0]:
             st.session_state["assigned_by"] = assigned_by
             st.session_state["assignee"] = assignee
             if created > 0: st.success(f"Created {created} assignment(s) for {assignee}."); queue_feedback("success")
-            if dup_conflicts: st.warning(f"Skipped {len(dup_conflicts)} duplicate location(s) already Assigned/In Progress: {', '.join(map(str, dup_conflicts[:10]))}{'…' if len(dup_conflicts)>10 else ''}")
+            if dup_conflicts: st.warning(f"Skipped {len(dup_conflicts)} duplicate location(s) already Assigned/In Progress: {', '.join(map(str, dup_conflicts[:10]))}{'â€¦' if len(dup_conflicts)>10 else ''}")
             if locked_conflicts: st.warning(f"Skipped {len(locked_conflicts)} location(s) currently locked by another user.")
-            if not_in_cache: st.info(f"{len(not_in_cache)} location(s) not in inventory cache (FYI): {', '.join(map(str, not_in_cache[:10]))}{'…' if len(not_in_cache)>10 else ''}")
+            if not_in_cache: st.info(f"{len(not_in_cache)} location(s) not in inventory cache (FYI): {', '.join(map(str, not_in_cache[:10]))}{'â€¦' if len(not_in_cache)>10 else ''}")
 
     st.divider()
     dfA = load_assignments()
@@ -403,7 +438,7 @@ with tabs[0]:
         def _lock_info(r):
             if lock_active(r):
                 who = r.get("lock_owner","?"); until = r.get("lock_expires_ts","")
-                return f"?? {who} until {until}"
+                return f"ðŸ”’ {who} until {until}"
             return "Available"
         dfA_disp = dfA.copy(); dfA_disp["lock_info"] = dfA_disp.apply(_lock_info, axis=1)
         st.write("All Assignments")
@@ -411,7 +446,7 @@ with tabs[0]:
     else:
         st.info("No assignments yet.")
 
-# ---------- My Assignments
+# ---------- My Assignments (with debounce to avoid loops)
 with tabs[1]:
     st.subheader("My Assignments")
     me = st.text_input("I am (name)", key="me_name", value=st.session_state.get("assignee",""))
@@ -428,7 +463,7 @@ with tabs[1]:
             def _lock_info2(r):
                 if lock_active(r):
                     who = r.get("lock_owner","?"); until = r.get("lock_expires_ts","")
-                    return f"?? {'You' if (who or '').lower()==(me or '').lower() else who} until {until}"
+                    return f"ðŸ”’ {'You' if (who or '').lower()==(me or '').lower() else who} until {until}"
                 return "Available"
             mine_disp = mine.copy()
             mine_disp["lock_info"] = mine_disp.apply(_lock_info2, axis=1)
@@ -443,13 +478,16 @@ with tabs[1]:
                 except Exception: sel_records = []
             if len(sel_records) > 0:
                 selected = sel_records[0]
-                st.session_state["current_assignment"] = selected
-                st.success("Assignment loaded into Perform Count."); queue_feedback("success")
-                st.rerun()
+                selected_id = selected.get("assignment_id", "")
+                last_id = st.session_state.get("_last_loaded_assignment_id", "")
+                if selected_id and selected_id != last_id:
+                    st.session_state["current_assignment"] = selected
+                    st.session_state["_last_loaded_assignment_id"] = selected_id
+                    st.rerun()
         else:
             opts = []
             for _, r in mine.iterrows():
-                label = f"{r.get('assignment_id','')} — {r.get('location','')} — {r.get('status','')}"
+                label = f"{r.get('assignment_id','')} â€” {r.get('location','')} â€” {r.get('status','')}"
                 opts.append((label, r.get("assignment_id","")))
             if opts:
                 def _fmt(val):
@@ -459,9 +497,12 @@ with tabs[1]:
                 choice = st.radio("Select an assignment", [v for _, v in opts], format_func=_fmt, key="my_assign_choice")
                 if choice:
                     selected = mine[mine["assignment_id"]==choice].iloc[0].to_dict()
-                    st.session_state["current_assignment"] = selected
-                    st.success("Assignment loaded into Perform Count."); queue_feedback("success")
-                    st.rerun()
+                    selected_id = selected.get("assignment_id", "")
+                    last_id = st.session_state.get("_last_loaded_assignment_id", "")
+                    if selected_id and selected_id != last_id:
+                        st.session_state["current_assignment"] = selected
+                        st.session_state["_last_loaded_assignment_id"] = selected_id
+                        st.rerun()
     else:
         st.info("No assignments found for you.")
     emit_feedback()
@@ -650,30 +691,30 @@ with tabs[4]:
     show_table(ex_disp, height=300, key="grid_exceptions", numeric_cols=["variance"])
     st.download_button("Export Exceptions CSV", data=ex.to_csv(index=False), file_name="cyclecount_exceptions.csv", mime="text/csv", key="disc_export_btn")
 
-# ---------- Settings
+# ---------- Settings (mapping defaults: saved -> session -> DEFAULT_MAPPING)
 with tabs[5]:
     st.subheader("Settings")
     st.write("Environment variables (optional):")
     st.code("""CYCLE_COUNT_LOG_DIR=<shared path>
 BIN_HELPER_LOG_DIR=<fallback if set>
 CC_LOCK_MINUTES=<default 20>
-AGGRID_ENABLED=<1 or 0>
-SUPERVISOR_PIN=<(unused)>""", language="bash")
+AGGRID_ENABLED=<1 or 0>""", language="bash")
     st.caption("Tip: point CYCLE_COUNT_LOG_DIR to your OneDrive JT Logistics folder so counters and your dashboard use the same files.")
     st.write("Active paths:", PATHS)
     st.divider()
-    st.markdown("### Inventory Excel — Upload & Map")
+    st.markdown("### Inventory Excel â€” Upload & Map")
     inv_df_cached = load_cached_inventory()
     if not inv_df_cached.empty:
         st.success(f"Inventory cache loaded: {len(inv_df_cached):,} rows")
         st.dataframe(inv_df_cached.head(10), use_container_width=True)
+
     upload = st.file_uploader("Upload Inventory Excel (.xlsx/.xls/.csv)", type=["xlsx","xls","csv"], key="settings_upload_inv")
     if upload is not None:
         try:
             name = getattr(upload, "name", "") or ""
             ext = (name.lower().split(".")[-1] if "." in name else "")
             if ext == "csv":
-                raw = pd.read_csv(upload, dtype=str).fillna("")
+                raw = read_csv_fallback(upload, dtype=str).fillna("")
                 st.write("Preview (first 10 rows):"); st.dataframe(raw.head(10), use_container_width=True)
             else:
                 engine = "openpyxl" if ext == "xlsx" else "xlrd"
@@ -681,19 +722,37 @@ SUPERVISOR_PIN=<(unused)>""", language="bash")
                 sheet = st.selectbox("Select sheet", xls.sheet_names, index=0, key="settings_sheet")
                 raw = pd.read_excel(xls, sheet_name=sheet, dtype=str).fillna("")
                 st.write("Preview (first 10 rows):"); st.dataframe(raw.head(10), use_container_width=True)
+
+            # Priority: saved mapping -> session mapping -> DEFAULT_MAPPING
+            mapping_saved = load_inventory_mapping() or {}
+            mapping_session = _get_session_mapping()
+            base_map = {**DEFAULT_MAPPING, **mapping_session, **mapping_saved}
+
             cols = list(raw.columns)
             st.markdown("#### Column Mapping")
-            mapping_prev = load_inventory_mapping()
+
+            def idx_for(colname):
+                return (cols.index(colname)+1) if (colname in cols and colname) else 0
+
             c1,c2,c3,c4,c5 = st.columns(5)
-            with c1: loc_col = st.selectbox("Location", ["<none>"]+cols, index=(cols.index(mapping_prev.get("location",""))+1 if mapping_prev.get("location","") in cols else 0), key="map_loc")
-            with c2: sku_col = st.selectbox("SKU", ["<none>"]+cols, index=(cols.index(mapping_prev.get("sku",""))+1 if mapping_prev.get("sku","") in cols else 0), key="map_sku")
-            with c3: lot_col = st.selectbox("LOT Number", ["<none>"]+cols, index=(cols.index(mapping_prev.get("lot_number",""))+1 if mapping_prev.get("lot_number","") in cols else 0), key="map_lot")
-            with c4: pal_col = st.selectbox("Pallet ID", ["<none>"]+cols, index=(cols.index(mapping_prev.get("pallet_id",""))+1 if mapping_prev.get("pallet_id","") in cols else 0), key="map_pal")
-            with c5: qty_col = st.selectbox("Expected QTY", ["<none>"]+cols, index=(cols.index(mapping_prev.get("expected_qty",""))+1 if mapping_prev.get("expected_qty","") in cols else 0), key="map_qty")
+            with c1: loc_col = st.selectbox("Location", ["<none>"]+cols, index=idx_for(base_map.get("location","")), key="map_loc")
+            with c2: sku_col = st.selectbox("SKU", ["<none>"]+cols, index=idx_for(base_map.get("sku","")), key="map_sku")
+            with c3: lot_col = st.selectbox("LOT Number", ["<none>"]+cols, index=idx_for(base_map.get("lot_number","")), key="map_lot")
+            with c4: pal_col = st.selectbox("Pallet ID", ["<none>"]+cols, index=idx_for(base_map.get("pallet_id","")), key="map_pal")
+            with c5: qty_col = st.selectbox("Expected QTY", ["<none>"]+cols, index=idx_for(base_map.get("expected_qty","")), key="map_qty")
+
+            current_map = {
+                "location": (st.session_state.get("map_loc") if st.session_state.get("map_loc") and st.session_state.get("map_loc")!="<none>" else ""),
+                "sku": (st.session_state.get("map_sku") if st.session_state.get("map_sku") and st.session_state.get("map_sku")!="<none>" else ""),
+                "lot_number": (st.session_state.get("map_lot") if st.session_state.get("map_lot") and st.session_state.get("map_lot")!="<none>" else ""),
+                "pallet_id": (st.session_state.get("map_pal") if st.session_state.get("map_pal") and st.session_state.get("map_pal")!="<none>" else ""),
+                "expected_qty": (st.session_state.get("map_qty") if st.session_state.get("map_qty") and st.session_state.get("map_qty")!="<none>" else ""),
+            }
+            _set_session_mapping(current_map)
+
             if st.button("Save Mapping & Cache Inventory", type="primary", key="map_save_btn"):
-                mapping = {"location": (loc_col if loc_col!="<none>" else ""), "sku": (sku_col if sku_col!="<none>" else ""), "lot_number": (lot_col if lot_col!="<none>" else ""), "pallet_id": (pal_col if pal_col!="<none>" else ""), "expected_qty": (qty_col if qty_col!="<none>" else "")}
-                norm = normalize_inventory_df(raw, mapping)
-                save_inventory_cache(norm); save_inventory_mapping(mapping)
+                norm = normalize_inventory_df(raw, current_map)
+                save_inventory_cache(norm); save_inventory_mapping(current_map)
                 st.success(f"Saved mapping and cached {len(norm):,} rows."); st.rerun()
         except Exception as e:
-            st.warning(f"Excel load error: {e}")
+            st.warning(f"Excel load/mapping error: {e}")
