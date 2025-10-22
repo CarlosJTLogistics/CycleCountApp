@@ -12,7 +12,7 @@ except Exception:
 
 # ========= App meta =========
 APP_NAME = "Cycle Counting"
-VERSION = "v1.1.1 (stable keys + xls/csv + safe grid)"
+VERSION = "v1.2.0 (assignment safety + webhook payload + multiselect)"
 TZ_LABEL = "US/Central"
 LOCK_MINUTES_DEFAULT = 20
 LOCK_MINUTES = int(os.getenv("CC_LOCK_MINUTES", LOCK_MINUTES_DEFAULT))
@@ -232,6 +232,28 @@ def show_table(df, height=300, key=None, selectable=False, selection_mode="singl
     st.dataframe(df, use_container_width=True, height=height)
     return {"selected_rows": []}
 
+def emit_webhook(event: str, payload: dict):
+    """
+    Posts a JSON payload to CC_WEBHOOK_URL (or WEBHOOK_URL) if set.
+    Returns (ok: bool, msg: str). Writes errors to logs/webhook_errors.log.
+    """
+    url = os.getenv("CC_WEBHOOK_URL") or os.getenv("WEBHOOK_URL") or ""
+    if not url:
+        return False, "No webhook URL set"
+    try:
+        import json, urllib.request
+        data = json.dumps({"event": event, "source": APP_NAME, "version": VERSION, "payload": payload}).encode("utf-8")
+        req = urllib.request.Request(url, data=data, headers={"Content-Type":"application/json"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            _ = resp.read()
+        return True, "ok"
+    except Exception as e:
+        try:
+            with open(os.path.join(PATHS["root"], "webhook_errors.log"), "a", encoding="utf-8") as f:
+                f.write(f"{now_str()} | {event} | {e}\n")
+        except Exception:
+            pass
+        return False, str(e)
 # ========= App UI =========
 st.set_page_config(page_title=f"{APP_NAME} {VERSION}", layout="wide")
 st.title(f"{APP_NAME} ({VERSION})")
@@ -242,20 +264,21 @@ tabs = st.tabs(["Assign Counts","My Assignments","Perform Count","Dashboard (Liv
 # ---------- Assign Counts ----------
 with tabs[0]:
     st.subheader("Assign Counts")
-    # --- Who's assigning / who gets it ---
+
+    # Who assigns / to whom
     c_top1, c_top2 = st.columns(2)
     with c_top1:
         assigned_by = st.text_input("Assigned by", value=st.session_state.get("assigned_by",""), key="assign_assigned_by")
     with c_top2:
         assignee = st.text_input("Assign to (name)", value=st.session_state.get("assignee",""), key="assign_assignee")
 
-    # --- Location chooser (multi-select) + paste list ---
+    # Location options from cached inventory (Settings → Upload & Map → Save)
     inv_df = load_cached_inventory()
     loc_options = []
     if inv_df is not None and hasattr(inv_df, "empty") and not inv_df.empty and "location" in inv_df.columns:
         loc_options = sorted(inv_df["location"].astype(str).str.strip().replace("nan","").dropna().unique().tolist())
 
-    st.caption("Select one or more locations from the list, or paste a list (one per line). Other fields will auto-populate from your inventory cache.")
+    st.caption("Select multiple locations and/or paste a list. Other fields auto-fill from the inventory cache.")
     colL, colR = st.columns([1.2, 1])
 
     with colL:
@@ -263,7 +286,7 @@ with tabs[0]:
             "Locations",
             options=loc_options,
             default=[],
-            help="Search by typing; select multiple.",
+            help="Search and pick multiple.",
             key="assign_locations_multiselect"
         )
         pasted = st.text_area(
@@ -275,9 +298,7 @@ with tabs[0]:
         )
         # Merge selections + pasted (dedupe, keep selection order first)
         pasted_list = [ln.strip() for ln in pasted.splitlines() if ln.strip()] if pasted else []
-        # Preserve order: selected first, then pasted uniques not already picked
-        seen = set()
-        loc_merge = []
+        seen = set(); loc_merge = []
         for s in selected_locs + pasted_list:
             if s not in seen:
                 loc_merge.append(s); seen.add(s)
@@ -290,58 +311,118 @@ with tabs[0]:
             placeholder="Any special instructions for the counter..."
         )
 
-        # Create one assignment per location (auto-fill details from inventory if present)
         disabled = (not assigned_by) or (not assignee) or (len(loc_merge) == 0)
         if st.button("Create Assignments", type="primary", disabled=disabled, key="assign_create_btn"):
-            if not assigned_by or not assignee:
-                st.warning("Assigned by and Assignee are required.")
-            elif len(loc_merge) == 0:
-                st.warning("Pick at least one location.")
-            else:
-                created = 0
-                for loc in loc_merge:
-                    sku = lot_num = pallet = expected = ""
-                    if inv_df is not None and hasattr(inv_df, "empty") and not inv_df.empty:
-                        cand = inv_df[inv_df["location"].astype(str).str.strip().str.lower() == str(loc).strip().lower()]
-                        if not cand.empty:
-                            # Use the first matching row
-                            r = cand.iloc[0]
-                            sku = str(r.get("sku","")).strip()
-                            lot_num = lot_normalize(r.get("lot_number",""))
-                            pallet = str(r.get("pallet_id","")).strip()
-                            expected_val = r.get("expected_qty","")
-                            try:
-                                expected = str(int(float(expected_val))) if str(expected_val) != "" else ""
-                            except Exception:
-                                expected = str(expected_val) if str(expected_val) != "" else ""
+            dfA = load_assignments()
+            created = 0
+            dup_conflicts = []
+            locked_conflicts = []
+            not_in_cache = []
 
-                    row = {
-                        "assignment_id": mk_id("CC"),
-                        "assigned_by": assigned_by.strip(),
-                        "assignee": assignee.strip(),
-                        "location": str(loc).strip(),
-                        "sku": sku,
-                        "lot_number": lot_num,
-                        "pallet_id": pallet,
-                        "expected_qty": expected,
-                        "priority": "Normal",         # keep column; default value
-                        "status": "Assigned",
-                        "created_ts": now_str(),
-                        "due_date": "",               # removed from UI; leave blank in file
-                        "notes": notes.strip(),
-                        "lock_owner": "",
-                        "lock_start_ts": "",
-                        "lock_expires_ts": ""
-                    }
-                    safe_append_csv(PATHS["assign"], row, ASSIGN_COLS)
-                    created += 1
+            # Helper: check lock on any existing rows for this location
+            def _any_lock_active_for(loc):
+                if dfA is None or dfA.empty: return False
+                try:
+                    same = dfA[dfA["location"].astype(str).str.strip().str.lower() == str(loc).strip().lower()]
+                except Exception:
+                    return False
+                for _, r in same.iterrows():
+                    if lock_active(r): return True
+                return False
 
-                # remember names for convenience
-                st.session_state["assigned_by"] = assigned_by
-                st.session_state["assignee"] = assignee
+            # Create per-location with safety checks
+            for loc in loc_merge:
+                # Warn track: unknown in inv cache
+                if not inv_df.empty:
+                    if str(loc).strip() not in set(inv_df["location"].astype(str).str.strip().tolist()):
+                        not_in_cache.append(str(loc).strip())
+
+                # Block if duplicate open assignment already exists
+                is_dup = False
+                if dfA is not None and not dfA.empty:
+                    cand = dfA[
+                        (dfA["location"].astype(str).str.strip().str.lower() == str(loc).strip().lower()) &
+                        (dfA["status"].isin(["Assigned","In Progress"]))
+                    ]
+                    is_dup = not cand.empty
+
+                if is_dup:
+                    dup_conflicts.append(loc)
+                    continue
+
+                # Block if any lock is currently active for this location
+                if _any_lock_active_for(loc):
+                    locked_conflicts.append(loc)
+                    continue
+
+                # Auto-fill from inventory (best-effort)
+                sku = lot_num = pallet = expected = ""
+                try:
+                    cand_inv = inv_df[inv_df["location"].astype(str).str.strip().str.lower() == str(loc).strip().lower()] if (inv_df is not None and not inv_df.empty) else None
+                    if cand_inv is not None and not cand_inv.empty:
+                        r = cand_inv.iloc[0]
+                        sku = str(r.get("sku","")).strip()
+                        lot_num = lot_normalize(r.get("lot_number",""))
+                        pallet = str(r.get("pallet_id","")).strip()
+                        expected_val = r.get("expected_qty","")
+                        try:
+                            expected = str(int(float(expected_val))) if str(expected_val) != "" else ""
+                        except Exception:
+                            expected = str(expected_val) if str(expected_val) != "" else ""
+                except Exception:
+                    pass
+
+                row = {
+                    "assignment_id": mk_id("CC"),
+                    "assigned_by": assigned_by.strip(),
+                    "assignee": assignee.strip(),
+                    "location": str(loc).strip(),
+                    "sku": sku,
+                    "lot_number": lot_num,
+                    "pallet_id": pallet,
+                    "expected_qty": expected,
+                    "priority": "Normal",     # column kept for compatibility
+                    "status": "Assigned",
+                    "created_ts": now_str(),
+                    "due_date": "",           # removed from UI
+                    "notes": notes.strip(),
+                    "lock_owner": "",
+                    "lock_start_ts": "",
+                    "lock_expires_ts": ""
+                }
+                safe_append_csv(PATHS["assign"], row, ASSIGN_COLS)
+                created += 1
+
+            # Session memory convenience
+            st.session_state["assigned_by"] = assigned_by
+            st.session_state["assignee"] = assignee
+
+            # UI summary
+            if created > 0:
                 st.success(f"Created {created} assignment(s) for {assignee}.")
+            if dup_conflicts:
+                st.warning(f"Skipped {len(dup_conflicts)} duplicate location(s) already Assigned/In Progress: {', '.join(map(str, dup_conflicts[:10]))}{'…' if len(dup_conflicts)>10 else ''}")
+            if locked_conflicts:
+                st.warning(f"Skipped {len(locked_conflicts)} location(s) currently locked by another user.")
+            if not_in_cache:
+                st.info(f"{len(not_in_cache)} location(s) not in inventory cache (FYI): {', '.join(map(str, not_in_cache[:10]))}{'…' if len(not_in_cache)>10 else ''}")
 
-    # --- Existing assignment table remains ---
+            # Webhook summary payload (best-effort; non-blocking)
+            try:
+                emit_webhook("assignment_created", {
+                    "assigned_by": assigned_by.strip(),
+                    "assignee": assignee.strip(),
+                    "notes": notes.strip(),
+                    "locations_submitted": loc_merge,
+                    "created": created,
+                    "skipped_duplicates": [str(x) for x in dup_conflicts],
+                    "skipped_locked": [str(x) for x in locked_conflicts],
+                    "not_in_cache": [str(x) for x in not_in_cache],
+                    "timestamp": now_str()
+                })
+            except Exception:
+                pass
+    # Existing "All Assignments" table remains
     st.divider()
     dfA = load_assignments()
     if not dfA.empty:
@@ -548,4 +629,5 @@ with tabs[5]:
                 st.rerun()
         except Exception as e:
             st.warning(f"Excel load error: {e}")
+
 
