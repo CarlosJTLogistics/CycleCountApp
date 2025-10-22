@@ -1,8 +1,8 @@
-﻿# v1.5.0
-# - Bilingual UI: English & Spanish (selector in header; CC_LANG=es to default Spanish)
-# - All user-facing text localized (tabs, labels, buttons, messages)
-# - Preserves locked Perform Count fields (only Counted QTY + Note editable)
-# - Keeps Submit Assignment flow, safe submit handler, sound/vibration ON, 20-min lock, default mapping
+﻿# v1.5.1
+# - Fix: AGGRID_ENABLED name (typo earlier as AGRID_ENABLED) to prevent NameError in show_table
+# - Preserve v1.5.0 bilingual UI (EN/ES), locked Perform Count fields (only Counted QTY + Note editable),
+#   Submit Assignment flow, safe submit handler, sound/vibration ON, 20-min lock, and default mapping
+
 import os, time, uuid, re, json
 from datetime import datetime, timedelta
 import pandas as pd
@@ -12,15 +12,12 @@ import streamlit.components.v1 as components
 # ---------------- I18N ----------------
 I18N = {
     "en": {
-        # Tabs
         "tab_assign": "Assign Counts",
         "tab_my": "My Assignments",
         "tab_perform": "Perform Count",
         "tab_dash": "Dashboard (Live)",
         "tab_disc": "Discrepancies",
         "tab_settings": "Settings",
-
-        # Header / common
         "app_name": "Cycle Counting",
         "active_dir": "Active log dir",
         "tz": "Timezone",
@@ -29,8 +26,6 @@ I18N = {
         "lang": "Language / Idioma",
         "lang_en": "English (EN)",
         "lang_es": "Español (ES)",
-
-        # Assign tab
         "assign_title": "Assign Counts",
         "assigned_by": "Assigned by",
         "assign_to": "Assign to (name)",
@@ -47,8 +42,6 @@ I18N = {
         "not_in_cache": "{n} location(s) not in inventory cache (FYI): {sample}",
         "available": "Available",
         "locked_by_until": "🔒 {who} until {until}",
-
-        # My Assignments
         "my_title": "My Assignments",
         "i_am": "I am (name)",
         "open": "Open",
@@ -66,8 +59,6 @@ I18N = {
         "err_locked_other": "Locked by {who} until {until}",
         "lock_success_opening": "{msg} — Opening Perform Count…",
         "tip_submit_once": "Tip: Click an assignment, then press 'Submit Assignment' to open Perform Count.",
-
-        # Perform Count
         "perform_title": "Perform Count",
         "auto_focus_loc": "Auto-focus Location",
         "auto_advance": "Auto-advance after scan",
@@ -84,9 +75,6 @@ I18N = {
         "warn_need_fields": "Assignee and Location are required.",
         "warn_count_invalid": "Enter a valid non-negative integer for Counted QTY.",
         "submitted_ok": "Submitted",
-        "submitted_ok_auto": "Submitted (auto)",
-
-        # Dashboard
         "dash_title": "Dashboard (Live)",
         "auto_refresh_sec": "Auto-refresh every (seconds)",
         "subs_file": "Submissions file",
@@ -95,13 +83,9 @@ I18N = {
         "short": "Short",
         "match": "Match",
         "latest_subs": "Latest Submissions",
-
-        # Discrepancies
         "disc_title": "Discrepancies",
         "exceptions": "Exceptions",
         "export_ex": "Export Exceptions CSV",
-
-        # Settings
         "settings_title": "Settings",
         "env_vars": "Environment variables (optional):",
         "tip_dir": "Tip: point CYCLE_COUNT_LOG_DIR to your OneDrive JT Logistics folder so counters and your dashboard use the same files.",
@@ -117,20 +101,15 @@ I18N = {
         "map_qty": "Expected QTY",
         "save_map": "Save Mapping & Cache Inventory",
         "excel_err": "Excel load/mapping error: {err}",
-
-        # Table empty
         "no_data": "No data",
     },
     "es": {
-        # Tabs
         "tab_assign": "Asignar Conteos",
         "tab_my": "Mis Asignaciones",
         "tab_perform": "Realizar Conteo",
         "tab_dash": "Tablero (En Vivo)",
         "tab_disc": "Discrepancias",
         "tab_settings": "Configuración",
-
-        # Header / common
         "app_name": "Conteo Cíclico",
         "active_dir": "Carpeta de registros",
         "tz": "Zona horaria",
@@ -139,8 +118,6 @@ I18N = {
         "lang": "Idioma / Language",
         "lang_en": "English (EN)",
         "lang_es": "Español (ES)",
-
-        # Assign tab
         "assign_title": "Asignar Conteos",
         "assigned_by": "Asignado por",
         "assign_to": "Asignar a (nombre)",
@@ -157,8 +134,6 @@ I18N = {
         "not_in_cache": "{n} ubicación(es) no están en el inventario (FYI): {sample}",
         "available": "Disponible",
         "locked_by_until": "🔒 {who} hasta {until}",
-
-        # My Assignments
         "my_title": "Mis Asignaciones",
         "i_am": "Yo soy (nombre)",
         "open": "Abiertas",
@@ -176,8 +151,6 @@ I18N = {
         "err_locked_other": "Bloqueada por {who} hasta {until}",
         "lock_success_opening": "{msg} — Abriendo Realizar Conteo…",
         "tip_submit_once": "Tip: Haz clic en una asignación y luego en 'Enviar Asignación' para abrir Realizar Conteo.",
-
-        # Perform Count
         "perform_title": "Realizar Conteo",
         "auto_focus_loc": "Autoenfocar Ubicación",
         "auto_advance": "Avanzar automáticamente después del escaneo",
@@ -194,9 +167,6 @@ I18N = {
         "warn_need_fields": "Se requieren Asignado a y Ubicación.",
         "warn_count_invalid": "Ingresa un entero válido (no negativo) para Cantidad Contada.",
         "submitted_ok": "Enviado",
-        "submitted_ok_auto": "Enviado (auto)",
-
-        # Dashboard
         "dash_title": "Tablero (En Vivo)",
         "auto_refresh_sec": "Auto-actualizar cada (segundos)",
         "subs_file": "Archivo de Envíos",
@@ -205,13 +175,9 @@ I18N = {
         "short": "Faltante",
         "match": "Igual",
         "latest_subs": "Envíos Recientes",
-
-        # Discrepancies
         "disc_title": "Discrepancias",
         "exceptions": "Excepciones",
         "export_ex": "Exportar CSV de Excepciones",
-
-        # Settings
         "settings_title": "Configuración",
         "env_vars": "Variables de entorno (opcional):",
         "tip_dir": "Tip: apunta CYCLE_COUNT_LOG_DIR a tu carpeta de OneDrive JT Logistics para compartir archivos.",
@@ -227,8 +193,6 @@ I18N = {
         "map_qty": "Cantidad Esperada",
         "save_map": "Guardar Mapeo y Cachear Inventario",
         "excel_err": "Error al cargar/mapear Excel: {err}",
-
-        # Table empty
         "no_data": "Sin datos",
     },
 }
@@ -248,7 +212,7 @@ def t(key: str, **fmt):
         except Exception: return s
     return s
 
-# ---------------- Core imports & helpers ----------------
+# --- AgGrid import
 try:
     from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
     _AGGRID_IMPORTED = True
@@ -256,7 +220,7 @@ except Exception:
     _AGGRID_IMPORTED = False
 
 APP_NAME = "Cycle Counting"
-VERSION = "v1.5.0 (EN/ES)"
+VERSION = "v1.5.1 (EN/ES + AGGRID fix)"
 TZ_LABEL = "US/Central"
 LOCK_MINUTES_DEFAULT = 20
 LOCK_MINUTES = int(os.getenv("CC_LOCK_MINUTES", LOCK_MINUTES_DEFAULT))
@@ -272,8 +236,7 @@ DEFAULT_MAPPING = {
 
 def lot_normalize(x: str) -> str:
     if x is None or (isinstance(x,float) and pd.isna(x)): return ""
-    s = re.sub(r"\D", "", str(x))
-    s = re.sub(r"^0+", "", s)
+    s = re.sub(r"\D", "", str(x)); s = re.sub(r"^0+", "", s)
     return s or ""
 
 def ensure_dirs(paths):
@@ -300,7 +263,6 @@ ASSIGN_COLS = [
     "expected_qty","priority","status","created_ts","due_date","notes",
     "lock_owner","lock_start_ts","lock_expires_ts"
 ]
-
 SUBMIT_COLS = [
     "submission_id","assignment_id","assignee","location","sku","lot_number","pallet_id",
     "counted_qty","expected_qty","variance","variance_flag","timestamp","device_id","note"
@@ -427,9 +389,7 @@ def inv_lookup_expected(location: str, sku: str="", lot: str="", pallet_id: str=
     return None
 
 def lock_active(row: pd.Series) -> bool:
-    exp = parse_ts(row.get("lock_expires_ts",""))
-    return bool(exp and exp > datetime.now())
-
+    exp = parse_ts(row.get("lock_expires_ts","")); return bool(exp and exp > datetime.now())
 def lock_owned_by(row: pd.Series, user: str) -> bool:
     return (row.get("lock_owner","").strip().lower() == (user or "").strip().lower())
 
@@ -529,7 +489,8 @@ def emit_feedback():
     </script>
     """, height=0)
 
-AGRID_ENABLED = (os.getenv("AGGRID_ENABLED","1") == "1") and _AGGRID_IMPORTED
+# ✅ Correct name here:
+AGGRID_ENABLED = (os.getenv("AGGRID_ENABLED","1") == "1") and _AGGRID_IMPORTED
 
 def show_table(df, height=300, key=None, selectable=False, selection_mode="single", numeric_cols=None):
     if df is None or (hasattr(df, "empty") and df.empty):
@@ -575,10 +536,7 @@ with right:
 st.caption(t("tip_submit_once"))
 st.caption(f"{t('active_dir')}: {PATHS['root']} · {t('tz')}: {TZ_LABEL} · {t('lock')}: {LOCK_MINUTES} {t('minutes')}")
 
-# Localized tab labels
-TAB_LABELS = [
-    t("tab_assign"), t("tab_my"), t("tab_perform"), t("tab_dash"), t("tab_disc"), t("tab_settings")
-]
+TAB_LABELS = [t("tab_assign"), t("tab_my"), t("tab_perform"), t("tab_dash"), t("tab_disc"), t("tab_settings")]
 tabs = st.tabs(TAB_LABELS)
 
 # -------- Assign Counts
@@ -696,7 +654,6 @@ with tabs[1]:
             def _lock_info2(r):
                 if lock_active(r):
                     who = r.get("lock_owner","?"); until = r.get("lock_expires_ts","")
-                    # Show "You"/"Tú" depending on language
                     you = "You" if st.session_state.get("lang","en")=="en" else "Tú"
                     who_disp = you if (who or "").lower()==(me or "").lower() else who
                     return t("locked_by_until", who=who_disp, until=until)
@@ -753,7 +710,6 @@ with tabs[1]:
                             else:
                                 st.session_state["current_assignment"] = r.to_dict()
                                 st.success(t("lock_success_opening", msg=msg)); queue_feedback("success")
-                                # Switch to localized Perform tab
                                 switch_to_tab(t("tab_perform"))
     else:
         st.info(t("no_assign"))
@@ -794,7 +750,6 @@ with tabs[2]:
         _hydrate_from_current(cur)
         if selected_id: st.session_state["_perform_loaded_from"] = selected_id
 
-    # Read-only fields
     assignment_id = st.text_input(t("assignment_id"), key="perform_assignment_id", disabled=True)
     assignee      = st.text_input(t("assignee"), key="perform_assignee", disabled=True)
 
@@ -812,11 +767,9 @@ with tabs[2]:
     with c5:
         expected_num = st.number_input(t("expected_qty"), min_value=0, key="perform_expected", disabled=True)
 
-    # Editable fields
     counted_str = st.text_input(t("counted_qty"), placeholder="", key="perform_counted_str")
     note = st.text_input(t("note"), key="perform_note")
 
-    # Autofocus -> Counted QTY
     if auto_focus and not st.session_state.get("_did_autofocus"):
         focus_by_label(t("counted_qty")); st.session_state["_did_autofocus"] = True
 
@@ -848,8 +801,6 @@ with tabs[2]:
             st.session_state["_submit_msg"] = ("error", str(why)); return
 
         variance = counted_val - expected_num if expected_num is not None else ""
-        flag = (t("match") if (variance=="" or variance==0)
-                else (t("over") if variance>0 else t("short")))
         row = {
             "submission_id": mk_id("CCS"),
             "assignment_id": assignment_id or "",
@@ -961,7 +912,6 @@ CC_LANG=<en|es>""", language="bash")
                 sheet = st.selectbox("Select sheet", xls.sheet_names, index=0, key="settings_sheet")
                 raw = pd.read_excel(xls, sheet_name=sheet, dtype=str).fillna("")
                 st.write(t("preview_first10")); st.dataframe(raw.head(10), use_container_width=True)
-            # Priority: saved -> session -> default
             mapping_saved = load_inventory_mapping() or {}
             mapping_session = st.session_state.get("map_defaults", {})
             base_map = {**DEFAULT_MAPPING, **mapping_session, **mapping_saved}
