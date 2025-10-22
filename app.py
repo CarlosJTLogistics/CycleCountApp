@@ -391,6 +391,8 @@ with tabs[1]:
                     ok, msg = start_or_renew_lock(selected["assignment_id"], me)
                     if ok:
                         st.success(msg); st.rerun()
+    # Removed Start/Renew Lock button for clarity
+    st.info(selected.get(\"lock_info\",\"\"))  # Keep info only
                     else:
                         st.warning(msg)
             with c2:
@@ -553,6 +555,7 @@ with tabs[5]:
                 st.rerun()
         except Exception as e:
             st.warning(f"Excel load error: {e}")
+
 
 
 
