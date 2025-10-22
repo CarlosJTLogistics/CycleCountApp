@@ -13,7 +13,7 @@ except Exception:
 
 # ========= App meta =========
 APP_NAME = "Cycle Counting"
-VERSION = "v1.3.2 (defaults: sound/vibe ON; widget-state fix; mobile scan UX)"
+VERSION = "v1.3.3 (Supervisor delete + My Assignments selection fix)"
 TZ_LABEL = "US/Central"
 LOCK_MINUTES_DEFAULT = 20
 LOCK_MINUTES = int(os.getenv("CC_LOCK_MINUTES", LOCK_MINUTES_DEFAULT))
@@ -37,6 +37,7 @@ def get_paths():
     return {
         "root": active,
         "assign": os.path.join(active, "counts_assignments.csv"),
+        "assign_deleted": os.path.join(active, "counts_assignments_deleted.csv"),
         "subs": os.path.join(active, "cyclecount_submissions.csv"),
         "inv_csv": os.path.join(active, "inventory_lookup.csv"),
         "inv_map": os.path.join(active, "inventory_mapping.json"),
@@ -284,7 +285,7 @@ def show_table(df, height=300, key=None, selectable=False, selection_mode="singl
         try:
             gob = GridOptionsBuilder.from_dataframe(df)
             gob.configure_default_column(resizable=True, filter=True, sortable=True)
-            if selectable: gob.configure_selection(selection_mode)
+            if selectable: gob.configure_selection(selection_mode, use_checkbox=True)
             if numeric_cols:
                 for col in numeric_cols:
                     if col in df.columns: gob.configure_column(col, type=["numericColumn"])
@@ -325,7 +326,7 @@ if st.session_state.get("mobile_mode", True):
 
 st.caption(f"Active log dir: {PATHS['root']} · Timezone: {TZ_LABEL} · Lock: {LOCK_MINUTES} min")
 
-tabs = st.tabs(["Assign Counts","My Assignments","Perform Count","Dashboard (Live)","Discrepancies","Settings"])
+tabs = st.tabs(["Assign Counts","My Assignments","Perform Count","Dashboard (Live)","Discrepancies","Supervisor Tools","Settings"])
 
 # ---------- Assign Counts ----------
 with tabs[0]:
@@ -369,10 +370,8 @@ with tabs[0]:
                 if dfA is not None and not dfA.empty:
                     cand = dfA[(dfA["location"].astype(str).str.strip().str.lower() == str(loc).strip().lower()) & (dfA["status"].isin(["Assigned","In Progress"])) ]
                     is_dup = not cand.empty
-                if is_dup:
-                    dup_conflicts.append(loc); continue
-                if _any_lock_active_for(loc):
-                    locked_conflicts.append(loc); continue
+                if is_dup: dup_conflicts.append(loc); continue
+                if _any_lock_active_for(loc): locked_conflicts.append(loc); continue
                 sku = lot_num = pallet = expected = ""
                 try:
                     cand_inv = inv_df[inv_df["location"].astype(str).str.strip().str.lower() == str(loc).strip().lower()] if (inv_df is not None and not inv_df.empty) else None
@@ -430,26 +429,45 @@ with tabs[1]:
     cD.metric("Total", int(len(mine)))
     st.write("Your Assignments")
     if not mine.empty:
-        def _lock_info2(r):
-            if lock_active(r):
-                who = r.get("lock_owner","?"); until = r.get("lock_expires_ts","")
-                return f"🔒 {'You' if (who or '').lower()==(me or '').lower() else who} until {until}"
-            return "Available"
-        mine_disp = mine.copy(); mine_disp["lock_info"] = mine_disp.apply(_lock_info2, axis=1)
-        res = show_table(mine_disp, height=280, key="grid_my_assign", selectable=True, selection_mode="single")
-        sel = res.get("selected_rows", [])
-        if sel:
-            selected = sel[0]; st.session_state["current_assignment"] = selected; st.info(selected.get("lock_info",""))
+        if AGGRID_ENABLED:
+            def _lock_info2(r):
+                if lock_active(r):
+                    who = r.get("lock_owner","?"); until = r.get("lock_expires_ts","")
+                    return f"🔒 {'You' if (who or '').lower()==(me or '').lower() else who} until {until}"
+                return "Available"
+            mine_disp = mine.copy()
+            mine_disp["lock_info"] = mine_disp.apply(_lock_info2, axis=1)
+            res = show_table(mine_disp, height=300, key="grid_my_assign", selectable=True, selection_mode="single")
+            sel = res.get("selected_rows", [])
+            if sel:
+                selected = sel[0]
+                st.session_state["current_assignment"] = selected
+                st.success("Assignment loaded into Perform Count."); queue_feedback("success")
         else:
-            st.info("Select an assignment to view details.")
+            # Fallback selector when AgGrid isn't available
+            opts = []
+            for _, r in mine.iterrows():
+                label = f"{r.get('assignment_id','')} — {r.get('location','')} — {r.get('status','')}"
+                opts.append((label, r.get("assignment_id","")))
+            if opts:
+                def _fmt(val): 
+                    for lbl, v in opts:
+                        if v == val: return lbl
+                    return val
+                choice = st.radio("Select an assignment", [v for _, v in opts], format_func=_fmt, key="my_assign_choice")
+                if choice:
+                    selected = mine[mine["assignment_id"]==choice].iloc[0].to_dict()
+                    st.session_state["current_assignment"] = selected
+                    st.success("Assignment loaded into Perform Count."); queue_feedback("success")
     else:
         st.info("No assignments found for you.")
+    emit_feedback()
 
 # ---------- Perform Count ----------
 with tabs[2]:
     st.subheader("Perform Count")
 
-    # Scan UX toggles (no value=; rely on session_state defaults)
+    # Scan UX toggles (session_state only)
     t1, t2, t3 = st.columns(3)
     with t1: st.checkbox("Auto-focus Location", key="auto_focus")
     with t2: st.checkbox("Auto-advance after scan", key="auto_advance")
@@ -545,7 +563,7 @@ with tabs[2]:
                         save_assignments(dfA2)
                 st.success("Submitted"); queue_feedback("success")
 
-    if auto_submit and st.session_state.get("_auto_submit_try", False):
+    if st.session_state.get("auto_submit", False) and st.session_state.get("_auto_submit_try", False):
         st.session_state["_auto_submit_try"] = False
         if assignee and location:
             ok, why = validate_lock_for_submit(assignment_id, assignee)
@@ -580,7 +598,6 @@ with tabs[2]:
             else:
                 st.error(why); queue_feedback("error")
 
-    # Emit client feedback (sound/vibration) if queued
     emit_feedback()
 
 # ---------- Dashboard (Live) ----------
@@ -621,11 +638,88 @@ with tabs[4]:
     show_table(ex_disp, height=300, key="grid_exceptions", numeric_cols=["variance"])
     st.download_button("Export Exceptions CSV", data=ex.to_csv(index=False), file_name="cyclecount_exceptions.csv", mime="text/csv", key="disc_export_btn")
 
-# ---------- Settings ----------
+# ---------- Supervisor Tools ----------
+def delete_assignments(assign_ids, deleted_by, reason):
+    if not assign_ids: return 0
+    df = load_assignments()
+    if df.empty: return 0
+    mask = df["assignment_id"].isin(assign_ids)
+    sel = df[mask].copy()
+    if sel.empty: return 0
+    # Log deleted rows
+    for _, r in sel.iterrows():
+        row = r.to_dict()
+        row.update({"deleted_by": (deleted_by or "").strip(), "deleted_ts": now_str(), "reason": (reason or "").strip()})
+        cols = ASSIGN_COLS + ["deleted_by","deleted_ts","reason"]
+        safe_append_csv(PATHS["assign_deleted"], row, cols)
+    # Remove and save
+    df2 = df[~mask].copy()
+    save_assignments(df2)
+    return int(len(sel))
+
 with tabs[5]:
+    st.subheader("Supervisor Tools")
+    pin_cfg = st.secrets.get("SUPERVISOR_PIN", os.getenv("SUPERVISOR_PIN",""))
+    if not pin_cfg:
+        st.info("Set SUPERVISOR_PIN in Streamlit Secrets or environment to enable deletion tools.")
+    pin = st.text_input("Supervisor PIN", type="password", key="sup_pin")
+    unlocked = (pin_cfg and pin == pin_cfg)
+    if not pin_cfg:
+        st.stop()
+    if not unlocked:
+        st.warning("Enter valid PIN to unlock supervisor actions.")
+        st.stop()
+
+    dfA = load_assignments()
+    if dfA.empty:
+        st.info("No assignments to manage.")
+    else:
+        c1, c2 = st.columns([1,1])
+        with c1:
+            assignee_filter = st.text_input("Filter by Assignee (optional)", key="sup_flt_assignee")
+        with c2:
+            status_filter = st.multiselect("Status filter", ["Assigned","In Progress","Submitted"], default=["Assigned","In Progress","Submitted"], key="sup_flt_status")
+        view = dfA.copy()
+        if assignee_filter:
+            view = view[view["assignee"].str.lower().str.contains(assignee_filter.lower())]
+        if status_filter:
+            view = view[view["status"].isin(status_filter)]
+        st.write(f"Matching assignments: {len(view)}")
+        selection_ids = []
+
+        if AGGRID_ENABLED:
+            gob = GridOptionsBuilder.from_dataframe(view)
+            gob.configure_default_column(resizable=True, filter=True, sortable=True)
+            gob.configure_selection("multiple", use_checkbox=True)
+            grid = AgGrid(view, gridOptions=gob.build(), update_mode=GridUpdateMode.SELECTION_CHANGED, height=320, key="sup_assign_grid")
+            rows = grid.get("selected_rows", [])
+            selection_ids = [r.get("assignment_id","") for r in rows if r.get("assignment_id","")]
+        else:
+            # Fallback: multiselect by ID
+            options = view["assignment_id"].tolist()
+            selection_ids = st.multiselect("Select assignment IDs to delete", options, key="sup_sel_ids")
+
+        reason = st.text_input("Reason (required for audit)", key="sup_reason")
+        deleted_by = st.text_input("Deleted by (name)", value=st.session_state.get("assigned_by",""), key="sup_deleted_by")
+        confirm = st.checkbox("I understand this will permanently remove the selected assignment(s) from the active list.", key="sup_confirm")
+        btn_disabled = not (selection_ids and confirm and reason and deleted_by)
+
+        if st.button("Delete selected assignments", type="primary", disabled=btn_disabled, key="sup_delete_btn", use_container_width=True):
+            n = delete_assignments(selection_ids, deleted_by, reason)
+            if n > 0:
+                st.success(f"Deleted {n} assignment(s). They were logged to counts_assignments_deleted.csv for audit.")
+                queue_feedback("success")
+                st.rerun()
+            else:
+                st.warning("Nothing deleted. Check your selection.")
+                queue_feedback("error")
+    emit_feedback()
+
+# ---------- Settings ----------
+with tabs[6]:
     st.subheader("Settings")
     st.write("Environment variables (optional):")
-    st.code("CYCLE_COUNT_LOG_DIR=<shared path>\nBIN_HELPER_LOG_DIR=<fallback if set>\nCC_LOCK_MINUTES=<default 20>\nAGGRID_ENABLED=<1 or 0>", language="bash")
+    st.code("CYCLE_COUNT_LOG_DIR=<shared path>\nBIN_HELPER_LOG_DIR=<fallback if set>\nCC_LOCK_MINUTES=<default 20>\nAGGRID_ENABLED=<1 or 0>\nSUPERVISOR_PIN=<set in Streamlit secrets>", language="bash")
     st.caption("Tip: point CYCLE_COUNT_LOG_DIR to your OneDrive JT Logistics folder so counters and your dashboard use the same files.")
     st.write("Active paths:", PATHS)
     st.divider()
