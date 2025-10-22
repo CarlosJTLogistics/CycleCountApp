@@ -232,16 +232,16 @@ with tabs[0]:
     with c_top1:
         assigned_by = st.text_input("Assigned by", value=st.session_state.get("assigned_by",""), key="assign_assigned_by")
     with c_top2:
-        assignee = st.text_input("Assign to (name)", value=st.session_state.get("assignee",""))
+        assignee = st.text_input("Assign to (name"), value=st.session_state.get("assignee",""))
 
     c1,c2,c3 = st.columns(3)
     with c1: location = st.text_input("Location (scan or type)", key="assign_location")
-    with c2: sku = st.text_input("SKU (optional, key="assign_location")")
+    with c2: sku = st.text_input("SKU (optional"))
     with c3: lot = st.text_input("LOT Number (optional)", value="", help="Digits only; will be normalized", key="assign_lot")
 
     c4,c5,c6 = st.columns(3, key="assign_lot")
     with c4: pallet = st.text_input("Pallet ID (optional)", key="assign_pallet")
-    with c5: expected = st.number_input("Expected QTY (optional, key="assign_pallet")", min_value=0, value=0)
+    with c5: expected = st.number_input("Expected QTY (optional"), min_value=0, value=0)
     with c6: priority = st.selectbox("Priority", ["Normal","High","Low"], index=0, key="assign_priority")
 
     due_date = st.date_input("Due date", value=date.today(), key="assign_due_date")
@@ -345,7 +345,7 @@ with tabs[2]:
     assignee = st.text_input("Assignee", value=cur.get("assignee", st.session_state.get("me_name","", key="perform_assignment_id")))
     c1,c2 = st.columns(2)
     with c1: location = st.text_input("Scan Location", value=cur.get("location",""), placeholder="Scan now", key="perform_location")
-    with c2: pallet = st.text_input("Scan Pallet ID (optional, key="perform_location")", value=cur.get("pallet_id",""))
+    with c2: pallet = st.text_input("Scan Pallet ID (optional"), value=cur.get("pallet_id",""))
     c3,c4,c5 = st.columns(3)
     with c3: sku = st.text_input("SKU (optional)", value=cur.get("sku","", key="assign_sku"))
     with c4: lot = st.text_input("LOT Number (optional)", value=cur.get("lot_number",""), key="perform_lot")
@@ -357,7 +357,7 @@ with tabs[2]:
     with c5: expected_num = st.number_input("Expected QTY (auto from Inventory if available)", min_value=0, value=int(default_expected), key="perform_expected")
     counted = st.number_input("Counted QTY", min_value=0, step=1, key="perform_counted")
     device_id = st.text_input("Device ID (optional)", value=os.getenv("DEVICE_ID",""), key="perform_device_id")
-    note = st.text_input("Note (optional, key="perform_device_id")")
+    note = st.text_input("Note (optional"))
 
     # Quick lock control
     if assignment_id and assignee and st.button("Start / Renew 20-min Lock", use_container_width=True):
