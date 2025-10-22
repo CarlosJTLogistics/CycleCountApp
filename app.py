@@ -1,4 +1,7 @@
-﻿# v1.4.3 (My Assignments "Submit Assignment" button with green/red feedback; auto-switch to Perform Count; state hydration preserved; default mapping updated)
+﻿# v1.4.4 (Fix: auto-populate after Submit Assignment)
+# - Bug fix: removed premature setting of _perform_loaded_from in My Assignments (caused hydration to skip)
+# - Added second-chance hydration in Perform Count if fields are blank
+# - Preserved submit (green/red), lock, JS tab switch, haptics ON, and default mapping
 import os, time, uuid, re, json
 from datetime import datetime, timedelta
 import pandas as pd
@@ -13,13 +16,13 @@ except Exception:
     _AGGRID_IMPORTED = False
 
 APP_NAME = "Cycle Counting"
-VERSION = "v1.4.3 (submit assignment flow + auto-switch)"
+VERSION = "v1.4.4 (auto-populate fix)"
 TZ_LABEL = "US/Central"
 LOCK_MINUTES_DEFAULT = 20
 LOCK_MINUTES = int(os.getenv("CC_LOCK_MINUTES", LOCK_MINUTES_DEFAULT))
 TS_FMT = "%m/%d/%Y %I:%M:%S %p"
 
-# ------- Defaults (per Carlos' screenshot)
+# ------- Defaults (per screenshot)
 DEFAULT_MAPPING = {
     "location": "LocationName",
     "sku": "WarehouseSku",
@@ -499,7 +502,7 @@ with tabs[1]:
                 if choice:
                     selected_dict = mine[mine["assignment_id"]==choice].iloc[0].to_dict()
 
-        # Store "pending selection" only; don't hydrate Perform Count yet
+        # Store "pending selection" only
         if selected_dict:
             st.session_state["pending_assignment"] = selected_dict
 
@@ -508,7 +511,6 @@ with tabs[1]:
         if pending:
             st.markdown(f"**Selected:** `{pending.get('assignment_id','')}` — **Location:** `{pending.get('location','')}` — **Status:** `{pending.get('status','')}`")
             if st.button("Submit Assignment (Open Perform Count)", type="primary", key="my_submit_assignment_btn", use_container_width=True):
-                # Validation: name entered, ownership, not submitted, not locked by other
                 assign_id = pending.get("assignment_id","")
                 if not me:
                     st.error("Enter your name above to continue."); queue_feedback("error")
@@ -527,16 +529,13 @@ with tabs[1]:
                         elif lock_active(r) and not lock_owned_by(r, me):
                             st.error(f"Locked by {r.get('lock_owner','?')} until {r.get('lock_expires_ts','?')}"); queue_feedback("error")
                         else:
-                            # Start/renew lock for me
                             ok, msg = start_or_renew_lock(assign_id, me)
                             if not ok:
                                 st.error(msg); queue_feedback("error")
                             else:
-                                # Success: set as current assignment and guide user to Perform Count
+                                # Success: set as current assignment; DO NOT set _perform_loaded_from here
                                 st.session_state["current_assignment"] = r.to_dict()
-                                st.session_state["_perform_loaded_from"] = assign_id
                                 st.success(f"{msg} — Opening Perform Count…"); queue_feedback("success")
-                                # Switch tab via JS
                                 switch_to_tab("Perform Count")
     else:
         st.info("No assignments found for you.")
@@ -554,11 +553,7 @@ with tabs[2]:
     auto_advance= st.session_state.get("auto_advance", True)
     auto_submit = st.session_state.get("auto_submit", False)
 
-    # Hydrate from current assignment once per selection id
-    cur = st.session_state.get("current_assignment", {})
-    selected_id = cur.get("assignment_id", "")
-    loaded_from = st.session_state.get("_perform_loaded_from", "")
-    if selected_id and selected_id != loaded_from:
+    def _hydrate_from_current(cur: dict):
         exp_raw = cur.get("expected_qty","")
         try:
             exp_int = int(float(exp_raw)) if str(exp_raw).strip() != "" else 0
@@ -574,7 +569,20 @@ with tabs[2]:
             "perform_expected": exp_int,
             "perform_counted_str": "",
         })
+
+    # Primary hydration path
+    cur = st.session_state.get("current_assignment", {})
+    selected_id = cur.get("assignment_id", "")
+    loaded_from = st.session_state.get("_perform_loaded_from", "")
+    if selected_id and selected_id != loaded_from:
+        _hydrate_from_current(cur)
         st.session_state["_perform_loaded_from"] = selected_id
+
+    # Second-chance hydration: if we have a current assignment but fields are blank
+    if cur and not st.session_state.get("perform_assignment_id"):
+        _hydrate_from_current(cur)
+        if selected_id:
+            st.session_state["_perform_loaded_from"] = selected_id
 
     assignment_id = st.text_input("Assignment ID", key="perform_assignment_id")
     assignee      = st.text_input("Assignee", key="perform_assignee")
@@ -599,6 +607,7 @@ with tabs[2]:
     with c4:
         lot = st.text_input("LOT Number (optional)", key="perform_lot")
 
+    # Auto Expected QTY from inventory cache
     auto_expected = inv_lookup_expected(location, sku, lot, pallet)
     if auto_expected is not None and st.session_state.get("perform_expected") != int(auto_expected):
         st.session_state["perform_expected"] = int(auto_expected)
@@ -668,7 +677,7 @@ with tabs[2]:
                 st.success("Submitted"); queue_feedback("success")
                 st.session_state["perform_counted_str"] = ""
 
-    # Auto-submit path (unchanged logic)
+    # Auto-submit path (unchanged)
     if auto_submit and st.session_state.get("_auto_submit_try", False):
         st.session_state["_auto_submit_try"] = False
         if assignee and location and (counted_val not in (None, "invalid")):
