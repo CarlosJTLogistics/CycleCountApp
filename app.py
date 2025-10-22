@@ -555,10 +555,3 @@ with tabs[5]:
                 st.rerun()
         except Exception as e:
             st.warning(f"Excel load error: {e}")
-
-
-
-
-
-
-
