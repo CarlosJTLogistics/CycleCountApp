@@ -1,13 +1,254 @@
-﻿# v1.4.6
-# - Make Perform Count fields read-only: Assignment ID, Assignee, Location, Pallet ID, SKU, LOT Number, Expected QTY
-# - Only Counted QTY and Note remain editable
-# - Preserve submit-assignment flow, safe submit handler, default mapping, haptics, and all prior logic
+﻿# v1.5.0
+# - Bilingual UI: English & Spanish (selector in header; CC_LANG=es to default Spanish)
+# - All user-facing text localized (tabs, labels, buttons, messages)
+# - Preserves locked Perform Count fields (only Counted QTY + Note editable)
+# - Keeps Submit Assignment flow, safe submit handler, sound/vibration ON, 20-min lock, default mapping
 import os, time, uuid, re, json
 from datetime import datetime, timedelta
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
+# ---------------- I18N ----------------
+I18N = {
+    "en": {
+        # Tabs
+        "tab_assign": "Assign Counts",
+        "tab_my": "My Assignments",
+        "tab_perform": "Perform Count",
+        "tab_dash": "Dashboard (Live)",
+        "tab_disc": "Discrepancies",
+        "tab_settings": "Settings",
+
+        # Header / common
+        "app_name": "Cycle Counting",
+        "active_dir": "Active log dir",
+        "tz": "Timezone",
+        "lock": "Lock",
+        "minutes": "min",
+        "lang": "Language / Idioma",
+        "lang_en": "English (EN)",
+        "lang_es": "Español (ES)",
+
+        # Assign tab
+        "assign_title": "Assign Counts",
+        "assigned_by": "Assigned by",
+        "assign_to": "Assign to (name)",
+        "hint_assign": "Select multiple locations and/or paste a list. Other fields auto‑fill from the inventory cache.",
+        "locations": "Locations",
+        "paste_locs": "Paste locations (optional)",
+        "notes": "Notes (optional)",
+        "create_assign": "Create Assignments",
+        "all_assign": "All Assignments",
+        "no_assign": "No assignments yet.",
+        "created_n": "Created {n} assignment(s) for {name}.",
+        "dup_skipped": "Skipped {n} duplicate location(s) already Assigned/In Progress: {sample}",
+        "locked_skipped": "Skipped {n} location(s) currently locked by another user.",
+        "not_in_cache": "{n} location(s) not in inventory cache (FYI): {sample}",
+        "available": "Available",
+        "locked_by_until": "🔒 {who} until {until}",
+
+        # My Assignments
+        "my_title": "My Assignments",
+        "i_am": "I am (name)",
+        "open": "Open",
+        "in_progress": "In Progress",
+        "submitted": "Submitted",
+        "total": "Total",
+        "your_assign": "Your Assignments",
+        "radio_label": "Select an assignment",
+        "selected_summary": "**Selected:** `{id}` — **Location:** `{loc}` — **Status:** `{status}`",
+        "submit_assignment": "Submit Assignment (Open Perform Count)",
+        "err_enter_name": "Enter your name above to continue.",
+        "err_missing": "Assignment no longer exists.",
+        "err_belongs_to": "This assignment belongs to {assignee}.",
+        "err_already_submitted": "This assignment is already Submitted.",
+        "err_locked_other": "Locked by {who} until {until}",
+        "lock_success_opening": "{msg} — Opening Perform Count…",
+        "tip_submit_once": "Tip: Click an assignment, then press 'Submit Assignment' to open Perform Count.",
+
+        # Perform Count
+        "perform_title": "Perform Count",
+        "auto_focus_loc": "Auto-focus Location",
+        "auto_advance": "Auto-advance after scan",
+        "assignment_id": "Assignment ID",
+        "assignee": "Assignee",
+        "scan_location": "Scan Location",
+        "scan_pallet": "Scan Pallet ID (optional)",
+        "sku": "SKU (optional)",
+        "lot": "LOT Number (optional)",
+        "expected_qty": "Expected QTY (from Assignment/Inventory)",
+        "counted_qty": "Counted QTY",
+        "note": "Note (optional)",
+        "submit_count": "Submit Count",
+        "warn_need_fields": "Assignee and Location are required.",
+        "warn_count_invalid": "Enter a valid non-negative integer for Counted QTY.",
+        "submitted_ok": "Submitted",
+        "submitted_ok_auto": "Submitted (auto)",
+
+        # Dashboard
+        "dash_title": "Dashboard (Live)",
+        "auto_refresh_sec": "Auto-refresh every (seconds)",
+        "subs_file": "Submissions file",
+        "counts_today": "Counts Today",
+        "over": "Over",
+        "short": "Short",
+        "match": "Match",
+        "latest_subs": "Latest Submissions",
+
+        # Discrepancies
+        "disc_title": "Discrepancies",
+        "exceptions": "Exceptions",
+        "export_ex": "Export Exceptions CSV",
+
+        # Settings
+        "settings_title": "Settings",
+        "env_vars": "Environment variables (optional):",
+        "tip_dir": "Tip: point CYCLE_COUNT_LOG_DIR to your OneDrive JT Logistics folder so counters and your dashboard use the same files.",
+        "active_paths": "Active paths:",
+        "inv_upload_title": "Inventory Excel — Upload & Map",
+        "inv_cache_loaded": "Inventory cache loaded: {n} rows",
+        "preview_first10": "Preview (first 10 rows):",
+        "column_mapping": "Column Mapping",
+        "map_loc": "Location",
+        "map_sku": "SKU",
+        "map_lot": "LOT Number",
+        "map_pal": "Pallet ID",
+        "map_qty": "Expected QTY",
+        "save_map": "Save Mapping & Cache Inventory",
+        "excel_err": "Excel load/mapping error: {err}",
+
+        # Table empty
+        "no_data": "No data",
+    },
+    "es": {
+        # Tabs
+        "tab_assign": "Asignar Conteos",
+        "tab_my": "Mis Asignaciones",
+        "tab_perform": "Realizar Conteo",
+        "tab_dash": "Tablero (En Vivo)",
+        "tab_disc": "Discrepancias",
+        "tab_settings": "Configuración",
+
+        # Header / common
+        "app_name": "Conteo Cíclico",
+        "active_dir": "Carpeta de registros",
+        "tz": "Zona horaria",
+        "lock": "Bloqueo",
+        "minutes": "min",
+        "lang": "Idioma / Language",
+        "lang_en": "English (EN)",
+        "lang_es": "Español (ES)",
+
+        # Assign tab
+        "assign_title": "Asignar Conteos",
+        "assigned_by": "Asignado por",
+        "assign_to": "Asignar a (nombre)",
+        "hint_assign": "Seleccione varias ubicaciones y/o pegue una lista. Los demás campos se completan desde el inventario.",
+        "locations": "Ubicaciones",
+        "paste_locs": "Pegar ubicaciones (opcional)",
+        "notes": "Notas (opcional)",
+        "create_assign": "Crear Asignaciones",
+        "all_assign": "Todas las Asignaciones",
+        "no_assign": "Aún no hay asignaciones.",
+        "created_n": "Se crearon {n} asignación(es) para {name}.",
+        "dup_skipped": "Omitidas {n} ubicaciones duplicadas ya Asignadas/En Progreso: {sample}",
+        "locked_skipped": "Omitidas {n} ubicaciones actualmente bloqueadas por otro usuario.",
+        "not_in_cache": "{n} ubicación(es) no están en el inventario (FYI): {sample}",
+        "available": "Disponible",
+        "locked_by_until": "🔒 {who} hasta {until}",
+
+        # My Assignments
+        "my_title": "Mis Asignaciones",
+        "i_am": "Yo soy (nombre)",
+        "open": "Abiertas",
+        "in_progress": "En Progreso",
+        "submitted": "Enviadas",
+        "total": "Total",
+        "your_assign": "Tus Asignaciones",
+        "radio_label": "Selecciona una asignación",
+        "selected_summary": "**Seleccionada:** `{id}` — **Ubicación:** `{loc}` — **Estado:** `{status}`",
+        "submit_assignment": "Enviar Asignación (Abrir Realizar Conteo)",
+        "err_enter_name": "Ingresa tu nombre arriba para continuar.",
+        "err_missing": "La asignación ya no existe.",
+        "err_belongs_to": "Esta asignación pertenece a {assignee}.",
+        "err_already_submitted": "Esta asignación ya fue Enviada.",
+        "err_locked_other": "Bloqueada por {who} hasta {until}",
+        "lock_success_opening": "{msg} — Abriendo Realizar Conteo…",
+        "tip_submit_once": "Tip: Haz clic en una asignación y luego en 'Enviar Asignación' para abrir Realizar Conteo.",
+
+        # Perform Count
+        "perform_title": "Realizar Conteo",
+        "auto_focus_loc": "Autoenfocar Ubicación",
+        "auto_advance": "Avanzar automáticamente después del escaneo",
+        "assignment_id": "ID de Asignación",
+        "assignee": "Asignado a",
+        "scan_location": "Escanear Ubicación",
+        "scan_pallet": "Escanear ID de Tarima (opcional)",
+        "sku": "SKU (opcional)",
+        "lot": "Número de Lote (opcional)",
+        "expected_qty": "Cantidad Esperada (de Asignación/Inventario)",
+        "counted_qty": "Cantidad Contada",
+        "note": "Nota (opcional)",
+        "submit_count": "Enviar Conteo",
+        "warn_need_fields": "Se requieren Asignado a y Ubicación.",
+        "warn_count_invalid": "Ingresa un entero válido (no negativo) para Cantidad Contada.",
+        "submitted_ok": "Enviado",
+        "submitted_ok_auto": "Enviado (auto)",
+
+        # Dashboard
+        "dash_title": "Tablero (En Vivo)",
+        "auto_refresh_sec": "Auto-actualizar cada (segundos)",
+        "subs_file": "Archivo de Envíos",
+        "counts_today": "Conteos Hoy",
+        "over": "Sobrante",
+        "short": "Faltante",
+        "match": "Igual",
+        "latest_subs": "Envíos Recientes",
+
+        # Discrepancies
+        "disc_title": "Discrepancias",
+        "exceptions": "Excepciones",
+        "export_ex": "Exportar CSV de Excepciones",
+
+        # Settings
+        "settings_title": "Configuración",
+        "env_vars": "Variables de entorno (opcional):",
+        "tip_dir": "Tip: apunta CYCLE_COUNT_LOG_DIR a tu carpeta de OneDrive JT Logistics para compartir archivos.",
+        "active_paths": "Rutas activas:",
+        "inv_upload_title": "Inventario Excel — Cargar y Mapear",
+        "inv_cache_loaded": "Inventario cargado: {n} filas",
+        "preview_first10": "Vista previa (primeras 10 filas):",
+        "column_mapping": "Mapeo de Columnas",
+        "map_loc": "Ubicación",
+        "map_sku": "SKU",
+        "map_lot": "Número de Lote",
+        "map_pal": "ID de Tarima",
+        "map_qty": "Cantidad Esperada",
+        "save_map": "Guardar Mapeo y Cachear Inventario",
+        "excel_err": "Error al cargar/mapear Excel: {err}",
+
+        # Table empty
+        "no_data": "Sin datos",
+    },
+}
+
+def _lang_default():
+    env = (os.getenv("CC_LANG","") or "").strip().lower()
+    return "es" if env == "es" else "en"
+
+def _ensure_default(k, v):
+    if k not in st.session_state: st.session_state[k] = v
+
+def t(key: str, **fmt):
+    lang = st.session_state.get("lang", _lang_default())
+    s = I18N.get(lang, I18N["en"]).get(key, I18N["en"].get(key, key))
+    if fmt:
+        try: return s.format(**fmt)
+        except Exception: return s
+    return s
+
+# ---------------- Core imports & helpers ----------------
 try:
     from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
     _AGGRID_IMPORTED = True
@@ -15,7 +256,7 @@ except Exception:
     _AGGRID_IMPORTED = False
 
 APP_NAME = "Cycle Counting"
-VERSION = "v1.4.6 (locked fields in Perform Count)"
+VERSION = "v1.5.0 (EN/ES)"
 TZ_LABEL = "US/Central"
 LOCK_MINUTES_DEFAULT = 20
 LOCK_MINUTES = int(os.getenv("CC_LOCK_MINUTES", LOCK_MINUTES_DEFAULT))
@@ -288,11 +529,11 @@ def emit_feedback():
     </script>
     """, height=0)
 
-AGGRID_ENABLED = (os.getenv("AGGRID_ENABLED","1") == "1") and _AGGRID_IMPORTED
+AGRID_ENABLED = (os.getenv("AGGRID_ENABLED","1") == "1") and _AGGRID_IMPORTED
 
 def show_table(df, height=300, key=None, selectable=False, selection_mode="single", numeric_cols=None):
     if df is None or (hasattr(df, "empty") and df.empty):
-        st.info("No data"); return {"selected_rows": []}
+        st.info(t("no_data")); return {"selected_rows": []}
     if AGGRID_ENABLED:
         try:
             gob = GridOptionsBuilder.from_dataframe(df)
@@ -309,62 +550,64 @@ def show_table(df, height=300, key=None, selectable=False, selection_mode="singl
     st.dataframe(df, use_container_width=True, height=height)
     return {"selected_rows": []}
 
-st.set_page_config(page_title=f"{APP_NAME} {VERSION}", layout="wide")
-st.title(f"{APP_NAME} ({VERSION})")
+# ---------------- Page layout & defaults ----------------
+st.set_page_config(page_title=f"{t('app_name')} {VERSION}", layout="wide")
 
-def _ensure_default(k, v):
-    if k not in st.session_state: st.session_state[k] = v
-
+# First ensure lang default, then header
+_ensure_default("lang", _lang_default())
 _ensure_default("mobile_mode", True)
 _ensure_default("fb_sound", True)
 _ensure_default("fb_vibe", True)
 _ensure_default("auto_focus", True)
 _ensure_default("auto_advance", True)
 
-def _get_session_mapping():
-    return st.session_state.get("map_defaults", {})
+# Header with language selector
+left, right = st.columns([0.7, 0.3])
+with left:
+    st.title(f"{t('app_name')} ({VERSION})")
+with right:
+    sel = st.selectbox(t("lang"), [("en", t("lang_en")), ("es", t("lang_es"))],
+        index=(0 if st.session_state.get("lang","en")=="en" else 1),
+        format_func=lambda x: x[1], key="lang_select")
+    if sel[0] != st.session_state.get("lang","en"):
+        st.session_state["lang"] = sel[0]; st.rerun()
 
-def _set_session_mapping(mapping: dict):
-    st.session_state["map_defaults"] = {
-        "location": mapping.get("location",""),
-        "sku": mapping.get("sku",""),
-        "lot_number": mapping.get("lot_number",""),
-        "pallet_id": mapping.get("pallet_id",""),
-        "expected_qty": mapping.get("expected_qty",""),
-    }
+st.caption(t("tip_submit_once"))
+st.caption(f"{t('active_dir')}: {PATHS['root']} · {t('tz')}: {TZ_LABEL} · {t('lock')}: {LOCK_MINUTES} {t('minutes')}")
 
-st.caption("Tip: Click an assignment, then press 'Submit Assignment' to open Perform Count.")
-st.caption(f"Active log dir: {PATHS['root']} · Timezone: {TZ_LABEL} · Lock: {LOCK_MINUTES} min")
-
-tabs = st.tabs(["Assign Counts","My Assignments","Perform Count","Dashboard (Live)","Discrepancies","Settings"])
+# Localized tab labels
+TAB_LABELS = [
+    t("tab_assign"), t("tab_my"), t("tab_perform"), t("tab_dash"), t("tab_disc"), t("tab_settings")
+]
+tabs = st.tabs(TAB_LABELS)
 
 # -------- Assign Counts
 with tabs[0]:
-    st.subheader("Assign Counts")
+    st.subheader(t("assign_title"))
     c_top1, c_top2 = st.columns(2)
     with c_top1:
-        assigned_by = st.text_input("Assigned by", value=st.session_state.get("assigned_by",""), key="assign_assigned_by")
+        assigned_by = st.text_input(t("assigned_by"), value=st.session_state.get("assigned_by",""), key="assign_assigned_by")
     with c_top2:
-        assignee = st.text_input("Assign to (name)", value=st.session_state.get("assignee",""), key="assign_assignee")
+        assignee = st.text_input(t("assign_to"), value=st.session_state.get("assignee",""), key="assign_assignee")
 
     inv_df = load_cached_inventory()
     loc_options = []
     if inv_df is not None and hasattr(inv_df, "empty") and not inv_df.empty and "location" in inv_df.columns:
         loc_options = sorted(inv_df["location"].astype(str).str.strip().replace("nan","").dropna().unique().tolist())
 
-    st.caption("Select multiple locations and/or paste a list. Other fields auto-fill from the inventory cache.")
+    st.caption(t("hint_assign"))
     colL, _ = st.columns([1.2, 1])
     with colL:
-        selected_locs = st.multiselect("Locations", options=loc_options, default=[], help="Search and pick multiple.", key="assign_locations_multiselect")
-        pasted = st.text_area("Paste locations (optional)", value="", height=120, key="assign_locations_paste", placeholder="e.g.\n11400804\n11400805\nTUN01001")
+        selected_locs = st.multiselect(t("locations"), options=loc_options, default=[], help="", key="assign_locations_multiselect")
+        pasted = st.text_area(t("paste_locs"), value="", height=120, key="assign_locations_paste", placeholder="e.g.\n11400804\n11400805\nTUN01001")
         pasted_list = [ln.strip() for ln in pasted.splitlines() if ln.strip()] if pasted else []
         seen = set(); loc_merge = []
         for s in selected_locs + pasted_list:
             if s not in seen:
                 loc_merge.append(s); seen.add(s)
-        notes = st.text_area("Notes (optional)", value="", height=80, key="assign_notes", placeholder="Any special instructions for the counter...")
+        notes = st.text_area(t("notes"), value="", height=80, key="assign_notes")
         disabled = (not assigned_by) or (not assignee) or (len(loc_merge) == 0)
-        if st.button("Create Assignments", type="primary", disabled=disabled, key="assign_create_btn", use_container_width=True):
+        if st.button(t("create_assign"), type="primary", disabled=disabled, key="assign_create_btn", use_container_width=True):
             dfA = load_assignments()
             created = 0; dup_conflicts = []; locked_conflicts = []; not_in_cache = []
             def _any_lock_active_for(loc):
@@ -408,26 +651,44 @@ with tabs[0]:
                 created += 1
             st.session_state["assigned_by"] = assigned_by
             st.session_state["assignee"] = assignee
-            if created > 0: st.success(f"Created {created} assignment(s) for {assignee}."); queue_feedback("success")
-            if dup_conflicts: st.warning(f"Skipped {len(dup_conflicts)} duplicate location(s) already Assigned/In Progress: {', '.join(map(str, dup_conflicts[:10]))}{'…' if len(dup_conflicts)>10 else ''}")
-            if locked_conflicts: st.warning(f"Skipped {len(locked_conflicts)} location(s) currently locked by another user.")
-            if not_in_cache: st.info(f"{len(not_in_cache)} location(s) not in inventory cache (FYI): {', '.join(map(str, not_in_cache[:10]))}{'…' if len(not_in_cache)>10 else ''}")
+            if created > 0: st.success(t("created_n", n=created, name=assignee)); queue_feedback("success")
+            if dup_conflicts:
+                sample = ", ".join(map(str, dup_conflicts[:10])) + ("…" if len(dup_conflicts)>10 else "")
+                st.warning(t("dup_skipped", n=len(dup_conflicts), sample=sample))
+            if locked_conflicts:
+                st.warning(t("locked_skipped", n=len(locked_conflicts)))
+            if not_in_cache:
+                sample = ", ".join(map(str, not_in_cache[:10])) + ("…" if len(not_in_cache)>10 else "")
+                st.info(t("not_in_cache", n=len(not_in_cache), sample=sample))
+
+    dfA = load_assignments()
+    if not dfA.empty:
+        def _lock_info(r):
+            if lock_active(r):
+                who = r.get("lock_owner","?"); until = r.get("lock_expires_ts","")
+                return t("locked_by_until", who=who, until=until)
+            return t("available")
+        dfA_disp = dfA.copy(); dfA_disp["lock_info"] = dfA_disp.apply(_lock_info, axis=1)
+        st.write(t("all_assign"))
+        show_table(dfA_disp, height=300, key="grid_all_assign")
+    else:
+        st.info(t("no_assign"))
 
 # -------- My Assignments
 with tabs[1]:
-    st.subheader("My Assignments")
-    me = st.text_input("I am (name)", key="me_name", value=st.session_state.get("assignee",""))
+    st.subheader(t("my_title"))
+    me = st.text_input(t("i_am"), key="me_name", value=st.session_state.get("assignee",""))
 
     dfA = load_assignments()
     mine = dfA[dfA["assignee"].str.lower() == (me or "").lower()] if me else dfA.iloc[0:0]
 
     cA, cB, cC, cD = st.columns(4)
-    cA.metric("Open", int((mine["status"]=="Assigned").sum()))
-    cB.metric("In Progress", int((mine["status"]=="In Progress").sum()))
-    cC.metric("Submitted", int((mine["status"]=="Submitted").sum()))
-    cD.metric("Total", int(len(mine)))
+    cA.metric(t("open"), int((mine["status"]=="Assigned").sum()))
+    cB.metric(t("in_progress"), int((mine["status"]=="In Progress").sum()))
+    cC.metric(t("submitted"), int((mine["status"]=="Submitted").sum()))
+    cD.metric(t("total"), int(len(mine)))
 
-    st.write("Your Assignments")
+    st.write(t("your_assign"))
     selected_dict = None
 
     if not mine.empty:
@@ -435,8 +696,11 @@ with tabs[1]:
             def _lock_info2(r):
                 if lock_active(r):
                     who = r.get("lock_owner","?"); until = r.get("lock_expires_ts","")
-                    return f"🔒 {'You' if (who or '').lower()==(me or '').lower() else who} until {until}"
-                return "Available"
+                    # Show "You"/"Tú" depending on language
+                    you = "You" if st.session_state.get("lang","en")=="en" else "Tú"
+                    who_disp = you if (who or "").lower()==(me or "").lower() else who
+                    return t("locked_by_until", who=who_disp, until=until)
+                return t("available")
             mine_disp = mine.copy()
             mine_disp["lock_info"] = mine_disp.apply(_lock_info2, axis=1)
             res = show_table(mine_disp, height=300, key="grid_my_assign", selectable=True, selection_mode="single")
@@ -457,51 +721,51 @@ with tabs[1]:
                     for lbl, v in opts:
                         if v == val: return lbl
                     return val
-                choice = st.radio("Select an assignment", [v for _, v in opts], format_func=_fmt, key="my_assign_choice")
+                choice = st.radio(t("radio_label"), [v for _, v in opts], format_func=_fmt, key="my_assign_choice")
                 if choice: selected_dict = mine[mine["assignment_id"]==choice].iloc[0].to_dict()
 
         if selected_dict: st.session_state["pending_assignment"] = selected_dict
 
         pending = st.session_state.get("pending_assignment")
         if pending:
-            st.markdown(f"**Selected:** `{pending.get('assignment_id','')}` — **Location:** `{pending.get('location','')}` — **Status:** `{pending.get('status','')}`")
-            if st.button("Submit Assignment (Open Perform Count)", type="primary", key="my_submit_assignment_btn", use_container_width=True):
+            st.markdown(t("selected_summary", id=pending.get('assignment_id',''), loc=pending.get('location',''), status=pending.get('status','')))
+            if st.button(t("submit_assignment"), type="primary", key="my_submit_assignment_btn", use_container_width=True):
                 assign_id = pending.get("assignment_id","")
                 if not me:
-                    st.error("Enter your name above to continue."); queue_feedback("error")
+                    st.error(t("err_enter_name")); queue_feedback("error")
                 else:
                     dfA2 = load_assignments()
                     row = dfA2[dfA2["assignment_id"]==assign_id]
                     if row.empty:
-                        st.error("Assignment no longer exists."); queue_feedback("error")
+                        st.error(t("err_missing")); queue_feedback("error")
                     else:
                         r = row.iloc[0]
                         if str(r.get("assignee","")).strip().lower() != str(me).strip().lower():
-                            st.error(f"This assignment belongs to {r.get('assignee','?')}."); queue_feedback("error")
+                            st.error(t("err_belongs_to", assignee=r.get('assignee','?'))); queue_feedback("error")
                         elif str(r.get("status","")).strip() == "Submitted":
-                            st.error("This assignment is already Submitted."); queue_feedback("error")
+                            st.error(t("err_already_submitted")); queue_feedback("error")
                         elif lock_active(r) and not lock_owned_by(r, me):
-                            st.error(f"Locked by {r.get('lock_owner','?')} until {r.get('lock_expires_ts','?')}"); queue_feedback("error")
+                            st.error(t("err_locked_other", who=r.get('lock_owner','?'), until=r.get('lock_expires_ts','?'))); queue_feedback("error")
                         else:
                             ok, msg = start_or_renew_lock(assign_id, me)
                             if not ok:
                                 st.error(msg); queue_feedback("error")
                             else:
                                 st.session_state["current_assignment"] = r.to_dict()
-                                st.success(f"{msg} — Opening Perform Count…"); queue_feedback("success")
-                                switch_to_tab("Perform Count")
+                                st.success(t("lock_success_opening", msg=msg)); queue_feedback("success")
+                                # Switch to localized Perform tab
+                                switch_to_tab(t("tab_perform"))
     else:
-        st.info("No assignments found for you.")
+        st.info(t("no_assign"))
     emit_feedback()
 
-# -------- Perform Count (locked fields except Counted QTY and Note)
+# -------- Perform Count (locked fields except Counted QTY + Note)
 with tabs[2]:
-    st.subheader("Perform Count")
+    st.subheader(t("perform_title"))
 
-    # toggles for UX only
     t1, t2 = st.columns(2)
-    with t1: st.checkbox("Auto-focus Location", key="auto_focus")
-    with t2: st.checkbox("Auto-advance after scan", key="auto_advance")
+    with t1: st.checkbox(t("auto_focus_loc"), key="auto_focus")
+    with t2: st.checkbox(t("auto_advance"), key="auto_advance")
     auto_focus  = st.session_state.get("auto_focus", True)
     auto_advance= st.session_state.get("auto_advance", True)
 
@@ -530,34 +794,32 @@ with tabs[2]:
         _hydrate_from_current(cur)
         if selected_id: st.session_state["_perform_loaded_from"] = selected_id
 
-    # --- READ-ONLY FIELDS ---
-    assignment_id = st.text_input("Assignment ID", key="perform_assignment_id", disabled=True)
-    assignee      = st.text_input("Assignee", key="perform_assignee", disabled=True)
+    # Read-only fields
+    assignment_id = st.text_input(t("assignment_id"), key="perform_assignment_id", disabled=True)
+    assignee      = st.text_input(t("assignee"), key="perform_assignee", disabled=True)
 
     c1, c2 = st.columns(2)
     with c1:
-        location = st.text_input("Scan Location", key="perform_location", disabled=True)
+        location = st.text_input(t("scan_location"), key="perform_location", disabled=True)
     with c2:
-        pallet   = st.text_input("Scan Pallet ID (optional)", key="perform_pallet", disabled=True)
+        pallet   = st.text_input(t("scan_pallet"), key="perform_pallet", disabled=True)
 
     c3, c4, c5 = st.columns(3)
     with c3:
-        sku = st.text_input("SKU (optional)", key="perform_sku", disabled=True)
+        sku = st.text_input(t("sku"), key="perform_sku", disabled=True)
     with c4:
-        lot = st.text_input("LOT Number (optional)", key="perform_lot", disabled=True)
-    # Expected QTY shown but not editable
+        lot = st.text_input(t("lot"), key="perform_lot", disabled=True)
     with c5:
-        expected_num = st.number_input("Expected QTY (from Assignment/Inventory)", min_value=0, key="perform_expected", disabled=True)
+        expected_num = st.number_input(t("expected_qty"), min_value=0, key="perform_expected", disabled=True)
 
-    # --- EDITABLE FIELDS ---
-    counted_str = st.text_input("Counted QTY", placeholder="Scan/enter count", key="perform_counted_str")
-    note = st.text_input("Note (optional)", key="perform_note")
+    # Editable fields
+    counted_str = st.text_input(t("counted_qty"), placeholder="", key="perform_counted_str")
+    note = st.text_input(t("note"), key="perform_note")
 
-    # Autofocus: after switch, go to Counted QTY
+    # Autofocus -> Counted QTY
     if auto_focus and not st.session_state.get("_did_autofocus"):
-        focus_by_label("Counted QTY"); st.session_state["_did_autofocus"] = True
+        focus_by_label(t("counted_qty")); st.session_state["_did_autofocus"] = True
 
-    # ---- Safe submit handler
     def _parse_count(s):
         s = (s or "").strip()
         if s == "": return None
@@ -577,16 +839,17 @@ with tabs[2]:
         expected_num  = st.session_state.get("perform_expected", 0)
 
         if not assignee or not location:
-            st.session_state["_submit_msg"] = ("warn","Assignee and Location are required."); return
+            st.session_state["_submit_msg"] = ("warn", t("warn_need_fields")); return
         if counted_val in (None, "invalid"):
-            st.session_state["_submit_msg"] = ("warn","Enter a valid non-negative integer for Counted QTY."); return
+            st.session_state["_submit_msg"] = ("warn", t("warn_count_invalid")); return
 
         ok, why = validate_lock_for_submit(assignment_id, assignee)
         if not ok:
             st.session_state["_submit_msg"] = ("error", str(why)); return
 
         variance = counted_val - expected_num if expected_num is not None else ""
-        flag = "Match" if variance=="" or variance==0 else ("Over" if variance>0 else "Short")
+        flag = (t("match") if (variance=="" or variance==0)
+                else (t("over") if variance>0 else t("short")))
         row = {
             "submission_id": mk_id("CCS"),
             "assignment_id": assignment_id or "",
@@ -598,7 +861,7 @@ with tabs[2]:
             "counted_qty": int(counted_val),
             "expected_qty": int(expected_num) if expected_num is not None else "",
             "variance": variance if variance != "" else "",
-            "variance_flag": flag,
+            "variance_flag": ("Over" if variance>0 else ("Short" if variance<0 else "Match")),
             "timestamp": now_str(),
             "device_id": "",
             "note": (note or "").strip(),
@@ -613,11 +876,11 @@ with tabs[2]:
                 dfA2.loc[ix, ["lock_owner","lock_start_ts","lock_expires_ts"]] = ["","",""]
                 save_assignments(dfA2)
 
-        st.session_state["_submit_msg"] = ("success","Submitted")
+        st.session_state["_submit_msg"] = ("success", t("submitted_ok"))
         st.session_state["perform_counted_str"] = ""
         queue_feedback("success")
 
-    st.button("Submit Count", type="primary", key="perform_submit_btn", use_container_width=True, on_click=_handle_submit)
+    st.button(t("submit_count"), type="primary", key="perform_submit_btn", use_container_width=True, on_click=_handle_submit)
 
     msg = st.session_state.pop("_submit_msg", None)
     if msg:
@@ -631,10 +894,10 @@ with tabs[2]:
 
 # -------- Dashboard (Live)
 with tabs[3]:
-    st.subheader("Dashboard (Live)")
+    st.subheader(t("dash_title"))
     subs_path = PATHS["subs"]
-    refresh_sec = st.slider("Auto-refresh every (seconds)", 2, 30, 5, key="dash_refresh")
-    st.caption(f"Submissions file: {subs_path}")
+    refresh_sec = st.slider(t("auto_refresh_sec"), 2, 30, 5, key="dash_refresh")
+    st.caption(f"{t('subs_file')}: {subs_path}")
     dfS = load_submissions()
     dfS_disp = dfS.copy()
     if st.session_state.get("mobile_mode", True) and not dfS_disp.empty:
@@ -643,11 +906,11 @@ with tabs[3]:
     today_str = datetime.now().strftime("%m/%d/%Y")
     today_df = dfS[dfS["timestamp"].str.contains(today_str)] if not dfS.empty else dfS
     c1,c2,c3,c4 = st.columns(4)
-    c1.metric("Counts Today", int(len(today_df)))
-    c2.metric("Over",  int((today_df["variance_flag"]=="Over").sum()) if not today_df.empty else 0)
-    c3.metric("Short", int((today_df["variance_flag"]=="Short").sum()) if not today_df.empty else 0)
-    c4.metric("Match", int((today_df["variance_flag"]=="Match").sum()) if not today_df.empty else 0)
-    st.write("Latest Submissions")
+    c1.metric(t("counts_today"), int(len(today_df)))
+    c2.metric(t("over"),  int((today_df["variance_flag"]=="Over").sum()) if not today_df.empty else 0)
+    c3.metric(t("short"), int((today_df["variance_flag"]=="Short").sum()) if not today_df.empty else 0)
+    c4.metric(t("match"), int((today_df["variance_flag"]=="Match").sum()) if not today_df.empty else 0)
+    st.write(t("latest_subs"))
     show_table(dfS_disp, height=320, key="grid_submissions", numeric_cols=["variance"])
     last_mod = os.path.getmtime(subs_path) if os.path.exists(subs_path) else 0
     time.sleep(refresh_sec)
@@ -656,32 +919,33 @@ with tabs[3]:
 
 # -------- Discrepancies
 with tabs[4]:
-    st.subheader("Discrepancies")
+    st.subheader(t("disc_title"))
     dfS = load_submissions()
     ex = dfS[dfS["variance_flag"].isin(["Over","Short"])]
     ex_disp = ex.copy()
     if st.session_state.get("mobile_mode", True) and not ex_disp.empty:
         keep = [c for c in ["timestamp","assignee","location","counted_qty","expected_qty","variance","variance_flag","note"] if c in ex_disp.columns]
         if keep: ex_disp = ex_disp[keep]
-    st.write("Exceptions")
+    st.write(t("exceptions"))
     show_table(ex_disp, height=300, key="grid_exceptions", numeric_cols=["variance"])
-    st.download_button("Export Exceptions CSV", data=ex.to_csv(index=False), file_name="cyclecount_exceptions.csv", mime="text/csv", key="disc_export_btn")
+    st.download_button(t("export_ex"), data=ex.to_csv(index=False), file_name="cyclecount_exceptions.csv", mime="text/csv", key="disc_export_btn")
 
 # -------- Settings
 with tabs[5]:
-    st.subheader("Settings")
-    st.write("Environment variables (optional):")
+    st.subheader(t("settings_title"))
+    st.write(t("env_vars"))
     st.code("""CYCLE_COUNT_LOG_DIR=<shared path>
 BIN_HELPER_LOG_DIR=<fallback if set>
 CC_LOCK_MINUTES=<default 20>
-AGGRID_ENABLED=<1 or 0>""", language="bash")
-    st.caption("Tip: point CYCLE_COUNT_LOG_DIR to your OneDrive JT Logistics folder so counters and your dashboard use the same files.")
-    st.write("Active paths:", PATHS)
+AGGRID_ENABLED=<1 or 0>
+CC_LANG=<en|es>""", language="bash")
+    st.caption(t("tip_dir"))
+    st.write(t("active_paths"), PATHS)
     st.divider()
-    st.markdown("### Inventory Excel — Upload & Map")
+    st.markdown(f"### {t('inv_upload_title')}")
     inv_df_cached = load_cached_inventory()
     if not inv_df_cached.empty:
-        st.success(f"Inventory cache loaded: {len(inv_df_cached):,} rows")
+        st.success(t("inv_cache_loaded", n=f"{len(inv_df_cached):,}"))
         st.dataframe(inv_df_cached.head(10), use_container_width=True)
     upload = st.file_uploader("Upload Inventory Excel (.xlsx/.xls/.csv)", type=["xlsx","xls","csv"], key="settings_upload_inv")
     if upload is not None:
@@ -690,25 +954,26 @@ AGGRID_ENABLED=<1 or 0>""", language="bash")
             ext = (name.lower().split(".")[-1] if "." in name else "")
             if ext == "csv":
                 raw = read_csv_fallback(upload, dtype=str).fillna("")
-                st.write("Preview (first 10 rows):"); st.dataframe(raw.head(10), use_container_width=True)
+                st.write(t("preview_first10")); st.dataframe(raw.head(10), use_container_width=True)
             else:
                 engine = "openpyxl" if ext == "xlsx" else "xlrd"
                 xls = pd.ExcelFile(upload, engine=engine)
                 sheet = st.selectbox("Select sheet", xls.sheet_names, index=0, key="settings_sheet")
                 raw = pd.read_excel(xls, sheet_name=sheet, dtype=str).fillna("")
-                st.write("Preview (first 10 rows):"); st.dataframe(raw.head(10), use_container_width=True)
+                st.write(t("preview_first10")); st.dataframe(raw.head(10), use_container_width=True)
+            # Priority: saved -> session -> default
             mapping_saved = load_inventory_mapping() or {}
-            mapping_session = _get_session_mapping()
+            mapping_session = st.session_state.get("map_defaults", {})
             base_map = {**DEFAULT_MAPPING, **mapping_session, **mapping_saved}
             cols = list(raw.columns)
-            st.markdown("#### Column Mapping")
+            st.markdown(f"#### {t('column_mapping')}")
             def idx_for(colname): return (cols.index(colname)+1) if (colname in cols and colname) else 0
             c1,c2,c3,c4,c5 = st.columns(5)
-            with c1: loc_col = st.selectbox("Location", ["<none>"]+cols, index=idx_for(base_map.get("location","")), key="map_loc")
-            with c2: sku_col = st.selectbox("SKU", ["<none>"]+cols, index=idx_for(base_map.get("sku","")), key="map_sku")
-            with c3: lot_col = st.selectbox("LOT Number", ["<none>"]+cols, index=idx_for(base_map.get("lot_number","")), key="map_lot")
-            with c4: pal_col = st.selectbox("Pallet ID", ["<none>"]+cols, index=idx_for(base_map.get("pallet_id","")), key="map_pal")
-            with c5: qty_col = st.selectbox("Expected QTY", ["<none>"]+cols, index=idx_for(base_map.get("expected_qty","")), key="map_qty")
+            with c1: loc_col = st.selectbox(t("map_loc"), ["<none>"]+cols, index=idx_for(base_map.get("location","")), key="map_loc")
+            with c2: sku_col = st.selectbox(t("map_sku"), ["<none>"]+cols, index=idx_for(base_map.get("sku","")), key="map_sku")
+            with c3: lot_col = st.selectbox(t("map_lot"), ["<none>"]+cols, index=idx_for(base_map.get("lot_number","")), key="map_lot")
+            with c4: pal_col = st.selectbox(t("map_pal"), ["<none>"]+cols, index=idx_for(base_map.get("pallet_id","")), key="map_pal")
+            with c5: qty_col = st.selectbox(t("map_qty"), ["<none>"]+cols, index=idx_for(base_map.get("expected_qty","")), key="map_qty")
             current_map = {
                 "location":   (st.session_state.get("map_loc") if st.session_state.get("map_loc")   and st.session_state.get("map_loc")!="<none>" else ""),
                 "sku":        (st.session_state.get("map_sku") if st.session_state.get("map_sku")   and st.session_state.get("map_sku")!="<none>" else ""),
@@ -716,10 +981,10 @@ AGGRID_ENABLED=<1 or 0>""", language="bash")
                 "pallet_id":  (st.session_state.get("map_pal") if st.session_state.get("map_pal")   and st.session_state.get("map_pal")!="<none>" else ""),
                 "expected_qty":(st.session_state.get("map_qty") if st.session_state.get("map_qty")  and st.session_state.get("map_qty")!="<none>" else ""),
             }
-            _set_session_mapping(current_map)
-            if st.button("Save Mapping & Cache Inventory", type="primary", key="map_save_btn"):
+            st.session_state["map_defaults"] = current_map
+            if st.button(t("save_map"), type="primary", key="map_save_btn"):
                 norm = normalize_inventory_df(raw, current_map)
                 save_inventory_cache(norm); save_inventory_mapping(current_map)
                 st.success(f"Saved mapping and cached {len(norm):,} rows."); st.rerun()
         except Exception as e:
-            st.warning(f"Excel load/mapping error: {e}")
+            st.warning(t("excel_err", err=e))
