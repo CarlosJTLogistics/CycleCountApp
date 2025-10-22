@@ -2,18 +2,22 @@
 from datetime import datetime, date, timedelta
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
+
 # Try to import AgGrid; fall back gracefully if not available
 try:
     from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
     _AGGRID_IMPORTED = True
 except Exception:
     _AGGRID_IMPORTED = False
+
 # ========= App meta =========
 APP_NAME = "Cycle Counting"
-VERSION = "v1.2.1 (assignment safety, no webhook)"
+VERSION = "v1.3.0 (mobile scan UX: autofocus, auto-advance, optional auto-submit, mobile mode)"
 TZ_LABEL = "US/Central"
 LOCK_MINUTES_DEFAULT = 20
 LOCK_MINUTES = int(os.getenv("CC_LOCK_MINUTES", LOCK_MINUTES_DEFAULT))
+
 # ========= Core utils =========
 TS_FMT = "%m/%d/%Y %I:%M:%S %p"
 def lot_normalize(x: str) -> str:
@@ -21,8 +25,10 @@ def lot_normalize(x: str) -> str:
     s = re.sub(r"\D", "", str(x))
     s = re.sub(r"^0+", "", s)
     return s or ""
+
 def ensure_dirs(paths):
     for p in paths: os.makedirs(p, exist_ok=True)
+
 def get_paths():
     base = os.getenv("CYCLE_COUNT_LOG_DIR") or os.getenv("BIN_HELPER_LOG_DIR") or os.path.join(os.getcwd(), "logs")
     cloud = "/mount/src/bin-helper/logs"
@@ -35,7 +41,9 @@ def get_paths():
         "inv_csv": os.path.join(active, "inventory_lookup.csv"),
         "inv_map": os.path.join(active, "inventory_mapping.json"),
     }
+
 PATHS = get_paths()
+
 ASSIGN_COLS = [
     "assignment_id","assigned_by","assignee","location","sku","lot_number","pallet_id",
     "expected_qty","priority","status","created_ts","due_date","notes",
@@ -45,6 +53,7 @@ SUBMIT_COLS = [
     "submission_id","assignment_id","assignee","location","sku","lot_number","pallet_id",
     "counted_qty","expected_qty","variance","variance_flag","timestamp","device_id","note"
 ]
+
 def safe_append_csv(path, row: dict, columns: list):
     exists = os.path.exists(path)
     df = pd.DataFrame([row], columns=columns)
@@ -57,6 +66,7 @@ def safe_append_csv(path, row: dict, columns: list):
         os.remove(tmp)
     else:
         df.to_csv(path, index=False, encoding="utf-8")
+
 def read_csv_locked(path, columns=None):
     if not os.path.exists(path): return pd.DataFrame(columns=columns or [])
     for _ in range(5):
@@ -65,22 +75,27 @@ def read_csv_locked(path, columns=None):
         except Exception:
             time.sleep(0.1)
     return pd.DataFrame(columns=columns or [])
+
 def now_str(): return datetime.now().strftime(TS_FMT)
 def mk_id(prefix): return f"{prefix}-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6].upper()}"
 def parse_ts(s: str):
     try: return datetime.strptime(s, TS_FMT)
     except Exception: return None
+
 # ========= Data access =========
 def load_assignments():
     df = read_csv_locked(PATHS["assign"], ASSIGN_COLS)
     for c in ["lock_owner","lock_start_ts","lock_expires_ts"]:
         if c not in df.columns: df[c] = ""
     return df
+
 def save_assignments(df: pd.DataFrame):
     for c in ASSIGN_COLS:
         if c not in df.columns: df[c] = ""
     df[ASSIGN_COLS].to_csv(PATHS["assign"], index=False, encoding="utf-8")
+
 def load_submissions(): return read_csv_locked(PATHS["subs"], SUBMIT_COLS)
+
 # ========= Inventory Excel/CSV support =========
 def load_cached_inventory() -> pd.DataFrame:
     if "inv_df" in st.session_state:
@@ -93,12 +108,15 @@ def load_cached_inventory() -> pd.DataFrame:
         except Exception:
             pass
     return pd.DataFrame(columns=["location","sku","lot_number","pallet_id","expected_qty"])
+
 def save_inventory_cache(df: pd.DataFrame):
     df.to_csv(PATHS["inv_csv"], index=False, encoding="utf-8")
     st.session_state["inv_df"] = df
+
 def save_inventory_mapping(mapping: dict):
     with open(PATHS["inv_map"], "w", encoding="utf-8") as f:
         json.dump(mapping, f, indent=2)
+
 def load_inventory_mapping() -> dict:
     if os.path.exists(PATHS["inv_map"]):
         try:
@@ -106,6 +124,7 @@ def load_inventory_mapping() -> dict:
         except Exception:
             return {}
     return {}
+
 def normalize_inventory_df(df: pd.DataFrame, mapping: dict) -> pd.DataFrame:
     out = pd.DataFrame()
     out["location"] = df[mapping.get("location","")].astype(str) if mapping.get("location","") in df.columns else ""
@@ -122,6 +141,7 @@ def normalize_inventory_df(df: pd.DataFrame, mapping: dict) -> pd.DataFrame:
     for c in ["location","sku","pallet_id"]:
         out[c] = out[c].astype(str).str.strip()
     return out.fillna("")
+
 def inv_lookup_expected(location: str, sku: str="", lot: str="", pallet_id: str=""):
     inv = load_cached_inventory()
     if inv.empty or "expected_qty" not in inv.columns: return None
@@ -153,12 +173,15 @@ def inv_lookup_expected(location: str, sku: str="", lot: str="", pallet_id: str=
                 except Exception:
                     continue
     return None
+
 # ========= Lock helpers =========
 def lock_active(row: pd.Series) -> bool:
     exp = parse_ts(row.get("lock_expires_ts",""))
     return bool(exp and exp > datetime.now())
+
 def lock_owned_by(row: pd.Series, user: str) -> bool:
     return (row.get("lock_owner","").strip().lower() == (user or "").strip().lower())
+
 def start_or_renew_lock(assignment_id: str, user: str):
     if not assignment_id or not user: return False, "Missing assignment or user"
     df = load_assignments()
@@ -173,6 +196,7 @@ def start_or_renew_lock(assignment_id: str, user: str):
     df.loc[i, "lock_expires_ts"] = exp.strftime(TS_FMT)
     save_assignments(df)
     return True, f"Locked by {user} until {exp.strftime('%I:%M %p')}"
+
 def validate_lock_for_submit(assignment_id: str, user: str) -> (bool, str):
     if not assignment_id: return True, "Ad-hoc submission"
     df = load_assignments()
@@ -182,6 +206,86 @@ def validate_lock_for_submit(assignment_id: str, user: str) -> (bool, str):
     if not lock_active(r): return True, "Lock expired or not set; proceeding"
     if lock_owned_by(r, user): return True, "Lock valid for user"
     return False, f"Locked by {r.get('lock_owner','?')} until {r.get('lock_expires_ts','?')}"
+
+# ========= UI helpers (mobile scan UX) =========
+def inject_mobile_css(scale: float = 1.15):
+    """Scale inputs and buttons for touch; applied when Mobile Mode is enabled."""
+    base_px = int(16 * scale)
+    st.markdown(f"""
+    <style>
+    .stTextInput input, .stNumberInput input {{
+        font-size: {base_px}px !important;
+        padding: 12px 14px !important;
+    }}
+    .stButton > button {{
+        font-size: {base_px}px !important;
+        padding: 12px 16px !important;
+        width: 100% !important;
+    }}
+    .stSelectbox, .stMultiselect, .stTextArea textarea {{
+        font-size: {base_px}px !important;
+    }}
+    </style>
+    """, unsafe_allow_html=True)
+
+def focus_by_label(label_text: str):
+    """Focus an input by its visible label. Works for text/number inputs."""
+    if not label_text: return
+    components.html(f"""
+    <script>
+      setTimeout(function(){{
+        const labs=[...parent.document.querySelectorAll('label')];
+        const lab=labs.find(el=>el.innerText.trim()==="{label_text}".trim());
+        if(lab){{
+          const inp=lab.parentElement.querySelector('input,textarea');
+          if(inp){{ inp.focus(); if(inp.select) inp.select(); }}
+        }}
+      }}, 150);
+    </script>
+    """, height=0)
+
+def submit_count_row(assignment_id, assignee, location, sku, lot, pallet, counted, expected_num, device_id, note):
+    """Centralized submit logic so button and auto-submit share the same code."""
+    variance = counted - expected_num if expected_num is not None else ""
+    flag = "Match" if variance=="" or variance==0 else ("Over" if variance>0 else "Short")
+    row = {
+        "submission_id": mk_id("CCS"),
+        "assignment_id": assignment_id or "",
+        "assignee": (assignee or "").strip(),
+        "location": (location or "").strip(),
+        "sku": (sku or "").strip(),
+        "lot_number": lot_normalize(lot),
+        "pallet_id": (pallet or "").strip(),
+        "counted_qty": int(counted),
+        "expected_qty": int(expected_num) if expected_num is not None else "",
+        "variance": variance if variance != "" else "",
+        "variance_flag": flag,
+        "timestamp": now_str(),
+        "device_id": device_id or "",
+        "note": (note or "").strip(),
+    }
+    safe_append_csv(PATHS["subs"], row, SUBMIT_COLS)
+    # If tied to an assignment, mark submitted and clear lock
+    dfA2 = load_assignments()
+    if assignment_id and not dfA2.empty:
+        ix = dfA2.index[dfA2["assignment_id"]==assignment_id]
+        if len(ix)>0:
+            dfA2.loc[ix, "status"] = "Submitted"
+            dfA2.loc[ix, ["lock_owner","lock_start_ts","lock_expires_ts"]] = ["","",""]
+            save_assignments(dfA2)
+
+# Callbacks to coordinate auto-advance / auto-submit
+def _on_loc_change():
+    # After location scan, go to Pallet (if empty) else Counted
+    next_label = "Scan Pallet ID (optional)" if (st.session_state.get("perform_pallet","")== "") else "Counted QTY"
+    st.session_state["_focus_target_label"] = next_label
+
+def _on_pallet_change():
+    st.session_state["_focus_target_label"] = "Counted QTY"
+
+def _on_count_change():
+    st.session_state["_auto_submit_try"] = True
+
 # ========= AgGrid safe wrapper =========
 AGGRID_ENABLED = (os.getenv("AGGRID_ENABLED","1") == "1") and _AGGRID_IMPORTED
 def show_table(df, height=300, key=None, selectable=False, selection_mode="single", numeric_cols=None):
@@ -205,11 +309,21 @@ def show_table(df, height=300, key=None, selectable=False, selection_mode="singl
             st.warning(f"AgGrid unavailable, falling back to simple table: {e}")
     st.dataframe(df, use_container_width=True, height=height)
     return {"selected_rows": []}
+
 # ========= App UI =========
 st.set_page_config(page_title=f"{APP_NAME} {VERSION}", layout="wide")
 st.title(f"{APP_NAME} ({VERSION})")
+# Global Mobile Mode toggle (affects styling and table columns)
+if "mobile_mode" not in st.session_state:
+    st.session_state["mobile_mode"] = True
+st.toggle("Mobile Mode (scan gun)", value=st.session_state["mobile_mode"], key="mobile_mode", help="Larger touch targets + simplified tables")
+if st.session_state.get("mobile_mode", False):
+    inject_mobile_css(scale=1.2)
+
 st.caption(f"Active log dir: {PATHS['root']} · Timezone: {TZ_LABEL} · Lock: {LOCK_MINUTES} min")
+
 tabs = st.tabs(["Assign Counts","My Assignments","Perform Count","Dashboard (Live)","Discrepancies","Settings"])
+
 # ---------- Assign Counts ----------
 with tabs[0]:
     st.subheader("Assign Counts")
@@ -255,7 +369,7 @@ with tabs[0]:
             placeholder="Any special instructions for the counter..."
         )
         disabled = (not assigned_by) or (not assignee) or (len(loc_merge) == 0)
-        if st.button("Create Assignments", type="primary", disabled=disabled, key="assign_create_btn"):
+        if st.button("Create Assignments", type="primary", disabled=disabled, key="assign_create_btn", use_container_width=True):
             dfA = load_assignments()
             created = 0
             dup_conflicts = []
@@ -340,7 +454,7 @@ with tabs[0]:
                 st.warning(f"Skipped {len(locked_conflicts)} location(s) currently locked by another user.")
             if not_in_cache:
                 st.info(f"{len(not_in_cache)} location(s) not in inventory cache (FYI): {', '.join(map(str, not_in_cache[:10]))}{'…' if len(not_in_cache)>10 else ''}")
-    # Existing "All Assignments" table remains
+
     st.divider()
     dfA = load_assignments()
     if not dfA.empty:
@@ -356,6 +470,8 @@ with tabs[0]:
         show_table(dfA_disp, height=300, key="grid_all_assign")
     else:
         st.info("No assignments yet.")
+
+# ---------- My Assignments ----------
 with tabs[1]:
     st.subheader("My Assignments")
     me = st.text_input("I am (name)", key="me_name", value=st.session_state.get("assignee",""))
@@ -388,16 +504,28 @@ with tabs[1]:
             st.info("Select an assignment to view details.")
     else:
         st.info("No assignments found for you.")
+
+# ---------- Perform Count ----------
 with tabs[2]:
     st.subheader("Perform Count")
+
+    # Scan UX toggles (defaults: focus ON, advance ON, auto-submit OFF)
+    cols_t = st.columns(3)
+    with cols_t[0]:
+        auto_focus = st.checkbox("Auto-focus Location", value=True, key="auto_focus")
+    with cols_t[1]:
+        auto_advance = st.checkbox("Auto-advance after scan", value=True, key="auto_advance")
+    with cols_t[2]:
+        auto_submit = st.checkbox("Auto-submit after Counted", value=False, key="auto_submit")
+
     cur = st.session_state.get("current_assignment", {})
     assignment_id = st.text_input("Assignment ID", value=cur.get("assignment_id",""), key="perform_assignment_id")
     assignee = st.text_input("Assignee", value=cur.get("assignee", st.session_state.get("me_name","")), key="perform_assignee")
     c1, c2 = st.columns(2)
     with c1:
-        location = st.text_input("Scan Location", value=cur.get("location",""), placeholder="Scan now", key="perform_location")
+        location = st.text_input("Scan Location", value=cur.get("location",""), placeholder="Scan or type location", key="perform_location", on_change=_on_loc_change)
     with c2:
-        pallet = st.text_input("Scan Pallet ID (optional)", value=cur.get("pallet_id",""), key="perform_pallet")
+        pallet = st.text_input("Scan Pallet ID (optional)", value=cur.get("pallet_id",""), placeholder="Scan pallet ID", key="perform_pallet", on_change=_on_pallet_change)
     c3, c4, c5 = st.columns(3)
     with c3:
         sku = st.text_input("SKU (optional)", value=cur.get("sku",""), key="perform_sku")
@@ -409,20 +537,30 @@ with tabs[2]:
     default_expected = auto_expected if auto_expected is not None else (try_cur_exp if try_cur_exp is not None else 0)
     with c5:
         expected_num = st.number_input("Expected QTY (auto from Inventory if available)", min_value=0, value=int(default_expected), key="perform_expected")
-    counted = st.number_input("Counted QTY", min_value=0, step=1, key="perform_counted")
+    counted = st.number_input("Counted QTY", min_value=0, step=1, key="perform_counted", on_change=_on_count_change)
     device_id = st.text_input("Device ID (optional)", value=os.getenv("DEVICE_ID",""), key="perform_device_id")
     note = st.text_input("Note (optional)", key="perform_note")
-    # Renew the 20-min lock (kept only here, per your preference)
+
+    # Focus management: first load and guided advance
+    if auto_focus and not st.session_state.get("_did_autofocus"):
+        # Only when screen loads (first visit to this tab)
+        focus_by_label("Scan Location")
+        st.session_state["_did_autofocus"] = True
+    target = st.session_state.get("_focus_target_label","")
+    if auto_advance and target:
+        focus_by_label(target)
+        st.session_state["_focus_target_label"] = ""
+
+    # Lock control
     if assignment_id and assignee and st.button("Start / Renew 20-min Lock", use_container_width=True, key="perform_lock_btn"):
         try:
             ok, msg = start_or_renew_lock(assignment_id, assignee)
-            if ok:
-                st.success(msg)
-            else:
-                st.warning(msg)
+            st.success(msg) if ok else st.warning(msg)
         except Exception as e:
             st.warning(f"Lock error: {e}")
-    if st.button("Submit Count", type="primary", key="perform_submit_btn"):
+
+    # Manual submit button (always available)
+    if st.button("Submit Count", type="primary", key="perform_submit_btn", use_container_width=True):
         if not assignee or not location:
             st.warning("Assignee and Location are required.")
         else:
@@ -430,40 +568,35 @@ with tabs[2]:
             if not ok:
                 st.error(why)
             else:
-                variance = counted - expected_num if expected_num is not None else ""
-                flag = "Match" if variance=="" or variance==0 else ("Over" if variance>0 else "Short")
-                row = {
-                    "submission_id": mk_id("CCS"),
-                    "assignment_id": assignment_id or "",
-                    "assignee": assignee.strip(),
-                    "location": location.strip(),
-                    "sku": sku.strip(),
-                    "lot_number": lot_normalize(lot),
-                    "pallet_id": pallet.strip(),
-                    "counted_qty": int(counted),
-                    "expected_qty": int(expected_num) if expected_num is not None else "",
-                    "variance": variance if variance != "" else "",
-                    "variance_flag": flag,
-                    "timestamp": now_str(),
-                    "device_id": device_id or "",
-                    "note": note.strip(),
-                }
-                safe_append_csv(PATHS["subs"], row, SUBMIT_COLS)
-                # If the submission is tied to an assignment, mark it submitted and clear the lock
-                dfA2 = load_assignments()
-                if assignment_id and not dfA2.empty:
-                    ix = dfA2.index[dfA2["assignment_id"]==assignment_id]
-                    if len(ix)>0:
-                        dfA2.loc[ix, "status"] = "Submitted"
-                        dfA2.loc[ix, ["lock_owner","lock_start_ts","lock_expires_ts"]] = ["","",""]
-                        save_assignments(dfA2)
+                submit_count_row(assignment_id, assignee, location, sku, lot, pallet, counted, expected_num, device_id, note)
                 st.success("Submitted")
+
+    # Optional auto-submit after Counted value changes
+    if auto_submit and st.session_state.get("_auto_submit_try", False):
+        st.session_state["_auto_submit_try"] = False
+        if not assignee or not location:
+            pass  # Do not auto-submit without essentials
+        else:
+            ok, why = validate_lock_for_submit(assignment_id, assignee)
+            if ok:
+                submit_count_row(assignment_id, assignee, location, sku, lot, pallet, counted, expected_num, device_id, note)
+                st.success("Submitted (auto)")
+            else:
+                st.error(why)
+
+# ---------- Dashboard (Live) ----------
 with tabs[3]:
     st.subheader("Dashboard (Live)")
     subs_path = PATHS["subs"]
     refresh_sec = st.slider("Auto-refresh every (seconds)", 2, 30, 5, key="dash_refresh")
     st.caption(f"Submissions file: {subs_path}")
     dfS = load_submissions()
+    # Mobile table simplification
+    dfS_disp = dfS.copy()
+    if st.session_state.get("mobile_mode", False) and not dfS_disp.empty:
+        keep = [c for c in ["timestamp","assignee","location","counted_qty","expected_qty","variance","variance_flag"] if c in dfS_disp.columns]
+        if keep:
+            dfS_disp = dfS_disp[keep]
     today_str = datetime.now().strftime("%m/%d/%Y")
     today_df = dfS[dfS["timestamp"].str.contains(today_str)] if not dfS.empty else dfS
     c1,c2,c3,c4 = st.columns(4)
@@ -472,19 +605,26 @@ with tabs[3]:
     c3.metric("Short", int((today_df["variance_flag"]=="Short").sum()) if not today_df.empty else 0)
     c4.metric("Match", int((today_df["variance_flag"]=="Match").sum()) if not today_df.empty else 0)
     st.write("Latest Submissions")
-    show_table(dfS, height=320, key="grid_submissions", numeric_cols=["variance"])
+    show_table(dfS_disp, height=320, key="grid_submissions", numeric_cols=["variance"])
     last_mod = os.path.getmtime(subs_path) if os.path.exists(subs_path) else 0
     time.sleep(refresh_sec)
     if os.path.exists(subs_path) and os.path.getmtime(subs_path) != last_mod:
         st.rerun()
+
 # ---------- Discrepancies ----------
 with tabs[4]:
     st.subheader("Discrepancies")
     dfS = load_submissions()
     ex = dfS[dfS["variance_flag"].isin(["Over","Short"])]
+    ex_disp = ex.copy()
+    if st.session_state.get("mobile_mode", False) and not ex_disp.empty:
+        keep = [c for c in ["timestamp","assignee","location","counted_qty","expected_qty","variance","variance_flag","note"] if c in ex_disp.columns]
+        if keep:
+            ex_disp = ex_disp[keep]
     st.write("Exceptions")
-    show_table(ex, height=300, key="grid_exceptions", numeric_cols=["variance"])
+    show_table(ex_disp, height=300, key="grid_exceptions", numeric_cols=["variance"])
     st.download_button("Export Exceptions CSV", data=ex.to_csv(index=False), file_name="cyclecount_exceptions.csv", mime="text/csv", key="disc_export_btn")
+
 # ---------- Settings ----------
 with tabs[5]:
     st.subheader("Settings")
