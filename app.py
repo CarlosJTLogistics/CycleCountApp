@@ -446,42 +446,53 @@ with tabs[1]:
         if sel:
             selected = sel[0]
             st.session_state["current_assignment"] = selected
-            st.info(selected.get("lock_info", ""))
+            st.info(selected.get("lock_info",""))
         else:
             st.info("Select an assignment to view details.")
     else:
         st.info("No assignments found for you.")
-
 with tabs[2]:
     st.subheader("Perform Count")
     cur = st.session_state.get("current_assignment", {})
+
     assignment_id = st.text_input("Assignment ID", value=cur.get("assignment_id",""), key="perform_assignment_id")
-    assignee = st.text_input("Assignee", value=cur.get("assignee", st.session_state.get("me_name","")), key="perform_assignee")
-    c1,c2 = st.columns(2)
+    assignee      = st.text_input("Assignee", value=cur.get("assignee", st.session_state.get("me_name","")), key="perform_assignee")
+
+    c1, c2 = st.columns(2)
     with c1:
         location = st.text_input("Scan Location", value=cur.get("location",""), placeholder="Scan now", key="perform_location")
     with c2:
         pallet = st.text_input("Scan Pallet ID (optional)", value=cur.get("pallet_id",""), key="perform_pallet")
-    c3,c4,c5 = st.columns(3)
+
+    c3, c4, c5 = st.columns(3)
     with c3:
         sku = st.text_input("SKU (optional)", value=cur.get("sku",""), key="perform_sku")
     with c4:
         lot = st.text_input("LOT Number (optional)", value=cur.get("lot_number",""), key="perform_lot")
+
     auto_expected = inv_lookup_expected(location, sku, lot, pallet)
     cur_exp = cur.get("expected_qty","")
     try_cur_exp = int(cur_exp) if str(cur_exp).isdigit() else None
     default_expected = auto_expected if auto_expected is not None else (try_cur_exp if try_cur_exp is not None else 0)
+
     with c5:
         expected_num = st.number_input("Expected QTY (auto from Inventory if available)", min_value=0, value=int(default_expected), key="perform_expected")
-    counted = st.number_input("Counted QTY", min_value=0, step=1, key="perform_counted")
+
+    counted   = st.number_input("Counted QTY", min_value=0, step=1, key="perform_counted")
     device_id = st.text_input("Device ID (optional)", value=os.getenv("DEVICE_ID",""), key="perform_device_id")
-    note = st.text_input("Note (optional)", key="perform_note")
-if assignment_id and assignee and st.button("Start / Renew 20-min Lock", use_container_width=True, key="perform_lock_btn"):
-    try:
-        ok, msg = start_or_renew_lock(assignment_id, assignee)
-        st.success(msg) if ok else st.warning(msg)
-    except Exception as e:
-        st.warning(f"Lock error: {e}")
+    note      = st.text_input("Note (optional)", key="perform_note")
+
+    # Renew the 20-min lock (kept only here, per your preference)
+    if assignment_id and assignee and st.button("Start / Renew 20-min Lock", use_container_width=True, key="perform_lock_btn"):
+        try:
+            ok, msg = start_or_renew_lock(assignment_id, assignee)
+            if ok:
+                st.success(msg)
+            else:
+                st.warning(msg)
+        except Exception as e:
+            st.warning(f"Lock error: {e}")
+
     if st.button("Submit Count", type="primary", key="perform_submit_btn"):
         if not assignee or not location:
             st.warning("Assignee and Location are required.")
@@ -502,23 +513,24 @@ if assignment_id and assignee and st.button("Start / Renew 20-min Lock", use_con
                     "pallet_id": pallet.strip(),
                     "counted_qty": int(counted),
                     "expected_qty": int(expected_num) if expected_num is not None else "",
-                    "variance": variance if variance!="" else "",
+                    "variance": variance if variance != "" else "",
                     "variance_flag": flag,
                     "timestamp": now_str(),
                     "device_id": device_id or "",
                     "note": note.strip(),
                 }
                 safe_append_csv(PATHS["subs"], row, SUBMIT_COLS)
-                dfA = load_assignments()
-                if assignment_id and not dfA.empty:
-                    ix = dfA.index[dfA["assignment_id"]==assignment_id]
-                    if len(ix)>0:
-                        dfA.loc[ix, "status"] = "Submitted"
-                        dfA.loc[ix, ["lock_owner","lock_start_ts","lock_expires_ts"]] = ["","",""]
-                        save_assignments(dfA)
-                st.success("Submitted")
 
-# ---------- Dashboard (Live) ----------
+                # If the submission is tied to an assignment, mark it submitted and clear the lock
+                dfA2 = load_assignments()
+                if assignment_id and not dfA2.empty:
+                    ix = dfA2.index[dfA2["assignment_id"]==assignment_id]
+                    if len(ix)>0:
+                        dfA2.loc[ix, "status"] = "Submitted"
+                        dfA2.loc[ix, ["lock_owner","lock_start_ts","lock_expires_ts"]] = ["","",""]
+                        save_assignments(dfA2)
+
+                st.success("Submitted")
 with tabs[3]:
     st.subheader("Dashboard (Live)")
     subs_path = PATHS["subs"]
@@ -606,6 +618,7 @@ with tabs[5]:
                 st.rerun()
         except Exception as e:
             st.warning(f"Excel load error: {e}")
+
 
 
 
