@@ -954,10 +954,3 @@ CC_TZ=<IANA TZ, e.g. America/Chicago>""", language="bash")
     st.success(f"Saved mapping and cached {len(norm):,} rows."); st.rerun()
   except Exception as e:
    st.warning(t("excel_err", err=e))
-
-
-
-
-
-
-
