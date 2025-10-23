@@ -1,4 +1,4 @@
-# v1.6.1
+﻿# v1.6.0
 # - TZ fix: use zoneinfo with CC_TZ (default America/Chicago) for all timestamps/locks/IDs
 # - Post-submit UX: clear fields and auto-return to My Assignments on success
 # - Download Submissions Log: buttons on Dashboard and Settings
@@ -7,14 +7,13 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import pandas as pd
 import streamlit as st
-ASSIGN_NAME_OPTIONS = ["Alex","Carlos","Clayton","Cody","Enrique","Erick","James","Jake","Johntai","Karen","Kevin","Luis","Nyahok","Stephanie","Tyteanna"]
 import streamlit.components.v1 as components
 
 # ---------------- I18N ----------------
 I18N = {
  "en": {
   "tab_assign": "Assign Counts",
-  "tab_lotlist": "LOT List", "tab_my": "My Assignments",
+  "tab_my": "My Assignments",
   "tab_perform": "Perform Count",
   "tab_dash": "Dashboard (Live)",
   "tab_disc": "Discrepancies",
@@ -26,11 +25,11 @@ I18N = {
   "minutes": "min",
   "lang": "Language / Idioma",
   "lang_en": "English (EN)",
-  "lang_es": "EspaÃ±ol (ES)",
+  "lang_es": "Español (ES)",
   "assign_title": "Assign Counts",
   "assigned_by": "Assigned by",
   "assign_to": "Assign to (name)",
-  "hint_assign": "Select multiple locations and/or paste a list. Other fields autoâ€‘fill from the inventory cache.",
+  "hint_assign": "Select multiple locations and/or paste a list. Other fields auto‑fill from the inventory cache.",
   "locations": "Locations",
   "paste_locs": "Paste locations (optional)",
   "notes": "Notes (optional)",
@@ -42,7 +41,7 @@ I18N = {
   "locked_skipped": "Skipped {n} location(s) currently locked by another user.",
   "not_in_cache": "{n} location(s) not in inventory cache (FYI): {sample}",
   "available": "Available",
-  "locked_by_until": "ðŸ”’ {who} until {until}",
+  "locked_by_until": "🔒 {who} until {until}",
   "my_title": "My Assignments",
   "i_am": "I am (name)",
   "open": "Open",
@@ -51,14 +50,14 @@ I18N = {
   "total": "Total",
   "your_assign": "Your Assignments",
   "radio_label": "Select an assignment",
-  "selected_summary": "**Selected:** `{id}` â€” **Location:** `{loc}` â€” **Status:** `{status}`",
+  "selected_summary": "**Selected:** `{id}` — **Location:** `{loc}` — **Status:** `{status}`",
   "submit_assignment": "Submit Assignment (Open Perform Count)",
   "err_enter_name": "Enter your name above to continue.",
   "err_missing": "Assignment no longer exists.",
   "err_belongs_to": "This assignment belongs to {assignee}.",
   "err_already_submitted": "This assignment is already Submitted.",
   "err_locked_other": "Locked by {who} until {until}",
-  "lock_success_opening": "{msg} â€” Opening Perform Countâ€¦",
+  "lock_success_opening": "{msg} — Opening Perform Count…",
   "tip_submit_once": "Tip: Click an assignment, then press 'Submit Assignment' to open Perform Count.",
   "perform_title": "Perform Count",
   "auto_focus_loc": "Auto-focus Location",
@@ -91,7 +90,7 @@ I18N = {
   "env_vars": "Environment variables (optional):",
   "tip_dir": "Tip: point CYCLE_COUNT_LOG_DIR to your OneDrive JT Logistics folder so counters and your dashboard use the same files.",
   "active_paths": "Active paths:",
-  "inv_upload_title": "Inventory Excel â€” Upload & Map",
+  "inv_upload_title": "Inventory Excel — Upload & Map",
   "inv_cache_loaded": "Inventory cache loaded: {n} rows",
   "preview_first10": "Preview (first 10 rows):",
   "column_mapping": "Column Mapping",
@@ -107,35 +106,35 @@ I18N = {
  },
  "es": {
   "tab_assign": "Asignar Conteos",
-  "tab_lotlist": "Lista de LOT", "tab_my": "Mis Asignaciones",
+  "tab_my": "Mis Asignaciones",
   "tab_perform": "Realizar Conteo",
   "tab_dash": "Tablero (En Vivo)",
   "tab_disc": "Discrepancias",
-  "tab_settings": "ConfiguraciÃ³n",
-  "app_name": "Conteo CÃ­clico",
+  "tab_settings": "Configuración",
+  "app_name": "Conteo Cíclico",
   "active_dir": "Carpeta de registros",
   "tz": "Zona horaria",
   "lock": "Bloqueo",
   "minutes": "min",
   "lang": "Idioma / Language",
   "lang_en": "English (EN)",
-  "lang_es": "EspaÃ±ol (ES)",
+  "lang_es": "Español (ES)",
   "assign_title": "Asignar Conteos",
   "assigned_by": "Asignado por",
   "assign_to": "Asignar a (nombre)",
-  "hint_assign": "Seleccione varias ubicaciones y/o pegue una lista. Los demÃ¡s campos se completan desde el inventario.",
+  "hint_assign": "Seleccione varias ubicaciones y/o pegue una lista. Los demás campos se completan desde el inventario.",
   "locations": "Ubicaciones",
   "paste_locs": "Pegar ubicaciones (opcional)",
   "notes": "Notas (opcional)",
   "create_assign": "Crear Asignaciones",
   "all_assign": "Todas las Asignaciones",
-  "no_assign": "AÃºn no hay asignaciones.",
-  "created_n": "Se crearon {n} asignaciÃ³n(es) para {name}.",
+  "no_assign": "Aún no hay asignaciones.",
+  "created_n": "Se crearon {n} asignación(es) para {name}.",
   "dup_skipped": "Omitidas {n} ubicaciones duplicadas ya Asignadas/En Progreso: {sample}",
   "locked_skipped": "Omitidas {n} ubicaciones actualmente bloqueadas por otro usuario.",
-  "not_in_cache": "{n} ubicaciÃ³n(es) no estÃ¡n en el inventario (FYI): {sample}",
+  "not_in_cache": "{n} ubicación(es) no están en el inventario (FYI): {sample}",
   "available": "Disponible",
-  "locked_by_until": "ðŸ”’ {who} hasta {until}",
+  "locked_by_until": "🔒 {who} hasta {until}",
   "my_title": "Mis Asignaciones",
   "i_am": "Yo soy (nombre)",
   "open": "Abiertas",
@@ -143,60 +142,60 @@ I18N = {
   "submitted": "Enviadas",
   "total": "Total",
   "your_assign": "Tus Asignaciones",
-  "radio_label": "Selecciona una asignaciÃ³n",
-  "selected_summary": "**Seleccionada:** `{id}` â€” **UbicaciÃ³n:** `{loc}` â€” **Estado:** `{status}`",
-  "submit_assignment": "Enviar AsignaciÃ³n (Abrir Realizar Conteo)",
+  "radio_label": "Selecciona una asignación",
+  "selected_summary": "**Seleccionada:** `{id}` — **Ubicación:** `{loc}` — **Estado:** `{status}`",
+  "submit_assignment": "Enviar Asignación (Abrir Realizar Conteo)",
   "err_enter_name": "Ingresa tu nombre arriba para continuar.",
-  "err_missing": "La asignaciÃ³n ya no existe.",
-  "err_belongs_to": "Esta asignaciÃ³n pertenece a {assignee}.",
-  "err_already_submitted": "Esta asignaciÃ³n ya fue Enviada.",
+  "err_missing": "La asignación ya no existe.",
+  "err_belongs_to": "Esta asignación pertenece a {assignee}.",
+  "err_already_submitted": "Esta asignación ya fue Enviada.",
   "err_locked_other": "Bloqueada por {who} hasta {until}",
-  "lock_success_opening": "{msg} â€” Abriendo Realizar Conteoâ€¦",
-  "tip_submit_once": "Tip: Haz clic en una asignaciÃ³n y luego en 'Enviar AsignaciÃ³n' para abrir Realizar Conteo.",
+  "lock_success_opening": "{msg} — Abriendo Realizar Conteo…",
+  "tip_submit_once": "Tip: Haz clic en una asignación y luego en 'Enviar Asignación' para abrir Realizar Conteo.",
   "perform_title": "Realizar Conteo",
-  "auto_focus_loc": "Autoenfocar UbicaciÃ³n",
-  "auto_advance": "Avanzar automÃ¡ticamente despuÃ©s del escaneo",
-  "assignment_id": "ID de AsignaciÃ³n",
+  "auto_focus_loc": "Autoenfocar Ubicación",
+  "auto_advance": "Avanzar automáticamente después del escaneo",
+  "assignment_id": "ID de Asignación",
   "assignee": "Asignado a",
-  "scan_location": "Escanear UbicaciÃ³n",
+  "scan_location": "Escanear Ubicación",
   "scan_pallet": "Escanear ID de Tarima (opcional)",
   "sku": "SKU (opcional)",
-  "lot": "NÃºmero de Lote (opcional)",
-  "expected_qty": "Cantidad Esperada (de AsignaciÃ³n/Inventario)",
+  "lot": "Número de Lote (opcional)",
+  "expected_qty": "Cantidad Esperada (de Asignación/Inventario)",
   "counted_qty": "Cantidad Contada",
   "note": "Nota (opcional)",
   "submit_count": "Enviar Conteo",
-  "warn_need_fields": "Se requieren Asignado a y UbicaciÃ³n.",
-  "warn_count_invalid": "Ingresa un entero vÃ¡lido (no negativo) para Cantidad Contada.",
+  "warn_need_fields": "Se requieren Asignado a y Ubicación.",
+  "warn_count_invalid": "Ingresa un entero válido (no negativo) para Cantidad Contada.",
   "submitted_ok": "Enviado",
   "dash_title": "Tablero (En Vivo)",
   "auto_refresh_sec": "Auto-actualizar cada (segundos)",
-  "subs_file": "Archivo de EnvÃ­os",
+  "subs_file": "Archivo de Envíos",
   "counts_today": "Conteos Hoy",
   "over": "Sobrante",
   "short": "Faltante",
   "match": "Igual",
-  "latest_subs": "EnvÃ­os Recientes",
+  "latest_subs": "Envíos Recientes",
   "disc_title": "Discrepancias",
   "exceptions": "Excepciones",
   "export_ex": "Exportar CSV de Excepciones",
-  "settings_title": "ConfiguraciÃ³n",
+  "settings_title": "Configuración",
   "env_vars": "Variables de entorno (opcional):",
   "tip_dir": "Tip: apunta CYCLE_COUNT_LOG_DIR a tu carpeta de OneDrive JT Logistics para compartir archivos.",
   "active_paths": "Rutas activas:",
-  "inv_upload_title": "Inventario Excel â€” Cargar y Mapear",
+  "inv_upload_title": "Inventario Excel — Cargar y Mapear",
   "inv_cache_loaded": "Inventario cargado: {n} filas",
   "preview_first10": "Vista previa (primeras 10 filas):",
   "column_mapping": "Mapeo de Columnas",
-  "map_loc": "UbicaciÃ³n",
+  "map_loc": "Ubicación",
   "map_sku": "SKU",
-  "map_lot": "NÃºmero de Lote",
+  "map_lot": "Número de Lote",
   "map_pal": "ID de Tarima",
   "map_qty": "Cantidad Esperada",
   "save_map": "Guardar Mapeo y Cachear Inventario",
   "excel_err": "Error al cargar/mapear Excel: {err}",
   "no_data": "Sin datos",
-  "download_subs": "Descargar Registro de EnvÃ­os"
+  "download_subs": "Descargar Registro de Envíos"
  },
 }
 def _lang_default():
@@ -220,7 +219,7 @@ except Exception:
  _AGGRID_IMPORTED = False
 
 APP_NAME = "Cycle Counting"
-VERSION = "v1.6.3 (Bulk: per-pallet only; TUN=racks; LOT List)"
+VERSION = "v1.6.2 (Issue Type + Actual IDs)""
 TZ_NAME = os.getenv("CC_TZ", "America/Chicago")
 TZ_LABEL = TZ_NAME
 LOCK_MINUTES_DEFAULT = 20
@@ -261,7 +260,7 @@ PATHS = get_paths()
 ASSIGN_COLS = [
  "assignment_id","assigned_by","assignee","location","sku","lot_number","pallet_id",
  "expected_qty","priority","status","created_ts","due_date","notes",
- "lock_owner","lock_start_ts","lock_expires_ts","assignment_type"
+ "lock_owner","lock_start_ts","lock_expires_ts"
 ]
 SUBMIT_COLS = [
  "submission_id","assignment_id","assignee","location","sku","lot_number","pallet_id",
@@ -316,7 +315,7 @@ def parse_ts(s: str):
 
 def load_assignments():
  df = read_csv_locked(PATHS["assign"], ASSIGN_COLS)
- for c in ["lock_owner","lock_start_ts","lock_expires_ts","assignment_type"]:
+ for c in ["lock_owner","lock_start_ts","lock_expires_ts"]:
   if c not in df.columns: df[c] = ""
  return df
 
@@ -495,7 +494,7 @@ def emit_feedback():
  </script>
  """, height=0)
 
-# âœ… Correct name here:
+# ✅ Correct name here:
 AGGRID_ENABLED = (os.getenv("AGGRID_ENABLED","1") == "1") and _AGGRID_IMPORTED
 
 def show_table(df, height=300, key=None, selectable=False, selection_mode="single", numeric_cols=None):
@@ -530,237 +529,110 @@ _ensure_default("auto_advance", True)
 # Header with language selector
 left, right = st.columns([0.7, 0.3])
 with left:
-    st.title(f"{t('app_name')} ({VERSION})")
+ st.title(f"{t('app_name')} ({VERSION})")
 with right:
-    sel = st.selectbox(t("lang"), [("en", t("lang_en")), ("es", t("lang_es"))],
-                       index=(0 if st.session_state.get("lang","en")=="en" else 1),
-                       format_func=lambda x: x[1], key="lang_select")
-    if sel[0] != st.session_state.get("lang","en"):
-        st.session_state["lang"] = sel[0]; st.rerun()
+ sel = st.selectbox(t("lang"), [("en", t("lang_en")), ("es", t("lang_es"))],
+                    index=(0 if st.session_state.get("lang","en")=="en" else 1),
+                    format_func=lambda x: x[1], key="lang_select")
+ if sel[0] != st.session_state.get("lang","en"):
+  st.session_state["lang"] = sel[0]; st.rerun()
 st.caption(t("tip_submit_once"))
-st.caption(f"{t('active_dir')}: {PATHS['root']} Â· {t('tz')}: {TZ_LABEL} Â· {t('lock')}: {LOCK_MINUTES} {t('minutes')}")
+st.caption(f"{t('active_dir')}: {PATHS['root']} · {t('tz')}: {TZ_LABEL} · {t('lock')}: {LOCK_MINUTES} {t('minutes')}")
 
 TAB_LABELS = [t("tab_assign"), t("tab_my"), t("tab_perform"), t("tab_dash"), t("tab_disc"), t("tab_settings")]
 tabs = st.tabs(TAB_LABELS)
 
 # ---------------- Assign Counts
 with tabs[0]:
-    st.subheader(t("assign_title"))
-    c_top1, c_top2 = st.columns(2)
-    with c_top1:
-        assigned_by = st.text_input(t("assigned_by"), value=st.session_state.get("assigned_by",""), key="assign_assigned_by")
-    with c_top2:
-        assignee = st.selectbox(
-            t("assign_to"),
-            ASSIGN_NAME_OPTIONS,
-            index=(ASSIGN_NAME_OPTIONS.index(st.session_state.get("assignee","")) if st.session_state.get("assignee","") in ASSIGN_NAME_OPTIONS else 0),
-            key="assign_assignee_select"
-        )
-    inv_df = load_cached_inventory()
-    loc_options = []
-    if inv_df is not None and hasattr(inv_df, "empty") and not inv_df.empty and "location" in inv_df.columns:
-        loc_options = sorted(inv_df["location"].astype(str).str.strip().replace("nan","").dropna().unique().tolist())
+ st.subheader(t("assign_title"))
+ c_top1, c_top2 = st.columns(2)
+ with c_top1:
+  assigned_by = st.text_input(t("assigned_by"), value=st.session_state.get("assigned_by",""), key="assign_assigned_by")
+ with c_top2:
+  assignee = st.text_input(t("assign_to"), value=st.session_state.get("assignee",""), key="assign_assignee")
+ inv_df = load_cached_inventory()
+ loc_options = []
+ if inv_df is not None and hasattr(inv_df, "empty") and not inv_df.empty and "location" in inv_df.columns:
+  loc_options = sorted(inv_df["location"].astype(str).str.strip().replace("nan","").dropna().unique().tolist())
+ st.caption(t("hint_assign"))
+ colL, _ = st.columns([1.2, 1])
+ with colL:
+  selected_locs = st.multiselect(t("locations"), options=loc_options, default=[], help="", key="assign_locations_multiselect")
+  pasted = st.text_area(t("paste_locs"), value="", height=120, key="assign_locations_paste", placeholder="e.g.\n11400804\n11400805\nTUN01001")
+  pasted_list = [ln.strip() for ln in pasted.splitlines() if ln.strip()] if pasted else []
+  seen = set(); loc_merge = []
+  for s in selected_locs + pasted_list:
+   if s not in seen:
+    loc_merge.append(s); seen.add(s)
+  notes = st.text_area(t("notes"), value="", height=80, key="assign_notes")
+  disabled = (not assigned_by) or (not assignee) or (len(loc_merge) == 0)
+  if st.button(t("create_assign"), type="primary", disabled=disabled, key="assign_create_btn", use_container_width=True):
+   dfA = load_assignments()
+   created = 0; dup_conflicts = []; locked_conflicts = []; not_in_cache = []
+   def _any_lock_active_for(loc):
+    if dfA is None or dfA.empty: return False
+    try: same = dfA[dfA["location"].astype(str).str.strip().str.lower() == str(loc).strip().lower()]
+    except Exception: return False
+    for _, r in same.iterrows():
+     if lock_active(r): return True
+    return False
+   for loc in loc_merge:
+    if not inv_df.empty:
+     if str(loc).strip() not in set(inv_df["location"].astype(str).str.strip().tolist()):
+      not_in_cache.append(str(loc).strip())
+    is_dup = False
+    if dfA is not None and not dfA.empty:
+     cand = dfA[(dfA["location"].astype(str).str.strip().str.lower() == str(loc).strip().lower()) & (dfA["status"].isin(["Assigned","In Progress"]))]
+     is_dup = not cand.empty
+    if is_dup: dup_conflicts.append(loc); continue
+    if _any_lock_active_for(loc): locked_conflicts.append(loc); continue
+    sku = lot_num = pallet = expected = ""
+    try:
+     cand_inv = inv_df[inv_df["location"].astype(str).str.strip().str.lower() == str(loc).strip().lower()] if (inv_df is not None and not inv_df.empty) else None
+     if cand_inv is not None and not cand_inv.empty:
+      r = cand_inv.iloc[0]
+      sku = str(r.get("sku","")); lot_num = lot_normalize(r.get("lot_number","")); pallet = str(r.get("pallet_id",""))
+      expected_val = r.get("expected_qty","")
+      try: expected = str(int(float(expected_val))) if str(expected_val) != "" else ""
+      except Exception: expected = str(expected_val) if str(expected_val) != "" else ""
+    except Exception: pass
+    row = {
+     "assignment_id": mk_id("CC"),
+     "assigned_by": assigned_by.strip(),
+     "assignee": assignee.strip(),
+     "location": str(loc).strip(),
+     "sku": sku, "lot_number": lot_num, "pallet_id": pallet,
+     "expected_qty": expected, "priority": "Normal", "status": "Assigned",
+     "created_ts": now_str(), "due_date": "", "notes": notes.strip(),
+     "lock_owner": "", "lock_start_ts": "", "lock_expires_ts": ""
+    }
+    safe_append_csv(PATHS["assign"], row, ASSIGN_COLS)
+    created += 1
+   st.session_state["assigned_by"] = assigned_by
+   st.session_state["assignee"] = assignee
+   if created > 0: st.success(t("created_n", n=created, name=assignee)); queue_feedback("success")
+   if dup_conflicts:
+    sample = ", ".join(map(str, dup_conflicts[:10])) + ("…" if len(dup_conflicts)>10 else "")
+    st.warning(t("dup_skipped", n=len(dup_conflicts), sample=sample))
+   if locked_conflicts:
+    st.warning(t("locked_skipped", n=len(locked_conflicts)))
+   if not_in_cache:
+    sample = ", ".join(map(str, not_in_cache[:10])) + ("…" if len(not_in_cache)>10 else "")
+    st.info(t("not_in_cache", n=len(not_in_cache), sample=sample))
+   dfA = load_assignments()
+   if not dfA.empty:
+    def _lock_info(r):
+     if lock_active(r):
+      who = r.get("lock_owner","?"); until = r.get("lock_expires_ts","")
+      return t("locked_by_until", who=who, until=until)
+     return t("available")
+    dfA_disp = dfA.copy(); dfA_disp["lock_info"] = dfA_disp.apply(_lock_info, axis=1)
+    st.write(t("all_assign"))
+    show_table(dfA_disp, height=300, key="grid_all_assign")
+   else:
+    st.info(t("no_assign"))
 
-    st.caption(t("hint_assign"))
-    colL, _ = st.columns([1.2, 1])
-    with colL:
-        selected_locs = st.multiselect(t("locations"), options=loc_options, default=[], key="assign_locations_multiselect")
-        pasted = st.text_area(t("paste_locs"), value="", height=120, key="assign_locations_paste", placeholder="e.g.\nG001\nTUN01001\n11400804")
-        pasted_list = [ln.strip() for ln in pasted.splitlines() if ln.strip()] if pasted else []
-        seen = set(); loc_merge = []
-        for s in selected_locs + pasted_list:
-            if s not in seen:
-                loc_merge.append(s); seen.add(s)
-
-        # ---- Bulk handling (per-pallet only). TUN are racks.
-        with st.expander("Bulk options"):
-            st.caption("Rule: Bulk = not 8-digit and not starting with 'TUN' (TUN are racks).")
-            pal_filter_txt = st.text_area("Pallet IDs filter (optional: comma/space/newline separated; blank = all in location)", key="bulk_pallets_filter", height=80)
-
-        notes = st.text_area(t("notes"), value="", height=80, key="assign_notes")
-
-        disabled = (not assigned_by) or (not assignee) or (len(loc_merge) == 0)
-        if st.button(t("create_assign"), type="primary", disabled=disabled, key="assign_create_btn", use_container_width=True):
-            dfA = load_assignments()
-            created = 0; dup_conflicts = []; locked_conflicts = []; not_in_cache = []; bulk_summary = []
-
-            def is_bulk_location(loc: str) -> bool:
-                # Bulk = not 8-digit rack AND not starting with 'TUN'
-                s = (loc or "").strip().upper()
-                return not (bool(re.fullmatch(r"\d{8}", s)) or s.startswith("TUN"))
-
-            def parse_pallet_filter(txt: str):
-                if not txt: return set()
-                parts = re.split(r"[\s,;]+", str(txt))
-                return set([p.strip() for p in parts if p.strip()])
-
-            pal_filter = parse_pallet_filter(st.session_state.get("bulk_pallets_filter",""))
-
-            def _any_lock_active_for(loc, pallet_id=None):
-                if dfA is None or dfA.empty: return False
-                try:
-                    same = dfA[dfA["location"].astype(str).str.strip().str.lower() == str(loc).strip().lower()]
-                    if pallet_id is not None and "pallet_id" in same.columns:
-                        same = same[same["pallet_id"].astype(str).str.strip().str.lower() == str(pallet_id).strip().lower()]
-                except Exception:
-                    return False
-                for _, r in same.iterrows():
-                    if lock_active(r): return True
-                return False
-
-            for loc in loc_merge:
-                loc_s = str(loc).strip()
-                is_bulk = is_bulk_location(loc_s)
-
-                # Track if location exists in cache
-                if not inv_df.empty:
-                    if loc_s not in set(inv_df["location"].astype(str).str.strip().tolist()):
-                        not_in_cache.append(loc_s)
-
-                if is_bulk:
-                    # ---- Per-pallet expansion (only mode for bulk)
-                    cand_inv = inv_df[inv_df["location"].astype(str).str.strip().str.lower() == loc_s.lower()] if (inv_df is not None and not inv_df.empty) else None
-                    if cand_inv is None or cand_inv.empty:
-                        # Fallback if cache has no pallets for this location
-                        sku = lot_num = pallet = expected = ""
-                        row = {
-                            "assignment_id": mk_id("CC"),
-                            "assigned_by": assigned_by.strip(),
-                            "assignee": assignee.strip(),
-                            "location": loc_s,
-                            "sku": sku, "lot_number": lot_num, "pallet_id": pallet,
-                            "expected_qty": expected, "priority": "Normal", "status": "Assigned",
-                            "created_ts": now_str(), "due_date": "", "notes": notes.strip(),
-                            "lock_owner": "", "lock_start_ts": "", "lock_expires_ts": ""
-                        }
-                        safe_append_csv(PATHS["assign"], row, ASSIGN_COLS); created += 1
-                        continue
-                    # Build clean pallet list (ignore blanks/nan)
-                    ps = cand_inv["pallet_id"].astype(str).str.strip()
-                    pallets = ps[(ps != "") & (ps.str.lower() != "nan")].unique().tolist()
-                    if pal_filter:
-                        pallets = [p for p in pallets if p in pal_filter]
-                    if not pallets:
-                        # No pallets resolved after filter -> single placeholder assignment
-                        r0 = cand_inv.iloc[0]
-                        sku = str(r0.get("sku","")); lot_num = lot_normalize(r0.get("lot_number",""))
-                        expected_val = r0.get("expected_qty","")
-                        try: expected = str(int(float(expected_val))) if str(expected_val) != "" else ""
-                        except Exception: expected = str(expected_val) if str(expected_val) != "" else ""
-                        row = {
-                            "assignment_id": mk_id("CC"),
-                            "assigned_by": assigned_by.strip(),
-                            "assignee": assignee.strip(),
-                            "location": loc_s,
-                            "sku": sku, "lot_number": lot_num, "pallet_id": "",
-                            "expected_qty": expected, "priority": "Normal", "status": "Assigned",
-                            "created_ts": now_str(), "due_date": "", "notes": notes.strip(),
-                            "lock_owner": "", "lock_start_ts": "", "lock_expires_ts": ""
-                        }
-                        safe_append_csv(PATHS["assign"], row, ASSIGN_COLS); created += 1
-                        continue
-
-                    made = 0
-                    for pal in pallets:
-                        # duplicate/lock check: location+pallet combo
-                        is_dup = False
-                        if dfA is not None and not dfA.empty:
-                            cand = dfA[
-                                (dfA["location"].astype(str).str.strip().str.lower() == loc_s.lower()) &
-                                (dfA["status"].isin(["Assigned","In Progress"])) &
-                                (dfA["pallet_id"].astype(str).str.strip().str.lower() == str(pal).strip().lower())
-                            ]
-                            is_dup = not cand.empty
-                        if is_dup:
-                            dup_conflicts.append(f"{loc_s}:{pal}"); continue
-                        if _any_lock_active_for(loc_s, pal):
-                            locked_conflicts.append(f"{loc_s}:{pal}"); continue
-
-                        rmatch = cand_inv[cand_inv["pallet_id"].astype(str).str.strip().str.lower() == str(pal).strip().lower()].iloc[0]
-                        sku = str(rmatch.get("sku",""))
-                        lot_num = lot_normalize(rmatch.get("lot_number",""))
-                        expected_val = rmatch.get("expected_qty","")
-                        try: expected = str(int(float(expected_val))) if str(expected_val) != "" else ""
-                        except Exception: expected = str(expected_val) if str(expected_val) != "" else ""
-                        row = {
-                            "assignment_id": mk_id("CC"),
-                            "assigned_by": assigned_by.strip(),
-                            "assignee": assignee.strip(),
-                            "location": loc_s,
-                            "sku": sku, "lot_number": lot_num, "pallet_id": str(pal),
-                            "expected_qty": expected, "priority": "Normal", "status": "Assigned",
-                            "created_ts": now_str(), "due_date": "", "notes": notes.strip(),
-                            "lock_owner": "", "lock_start_ts": "", "lock_expires_ts": ""
-                        }
-                        safe_append_csv(PATHS["assign"], row, ASSIGN_COLS); created += 1; made += 1
-                    if made > 0:
-                        bulk_summary.append(f"{loc_s} â†’ {made} pallet assignments")
-                        continue
-                # ---- Racks (8-digit or TUN): single location assignment
-                is_dup = False
-                if dfA is not None and not dfA.empty:
-                    cand = dfA[
-                        (dfA["location"].astype(str).str.strip().str.lower() == loc_s.lower()) &
-                        (dfA["status"].isin(["Assigned","In Progress"]))
-                    ]
-                    is_dup = not cand.empty
-                if is_dup:
-                    dup_conflicts.append(loc_s); continue
-                if _any_lock_active_for(loc_s, None):
-                    locked_conflicts.append(loc_s); continue
-
-                sku = lot_num = pallet = ""; expected = ""
-                try:
-                    cand_inv2 = inv_df[inv_df["location"].astype(str).str.strip().str.lower() == loc_s.lower()] if (inv_df is not None and not inv_df.empty) else None
-                    if cand_inv2 is not None and not cand_inv2.empty:
-                        r0 = cand_inv2.iloc[0]
-                        sku = str(r0.get("sku","")); lot_num = lot_normalize(r0.get("lot_number","")); pallet = str(r0.get("pallet_id",""))
-                        expected_val = r0.get("expected_qty","")
-                        try: expected = str(int(float(expected_val))) if str(expected_val) != "" else ""
-                        except Exception: expected = str(expected_val) if str(expected_val) != "" else ""
-                except Exception:
-                    pass
-
-                row = {
-                    "assignment_id": mk_id("CC"),
-                    "assigned_by": assigned_by.strip(),
-                    "assignee": assignee.strip(),
-                    "location": loc_s,
-                    "sku": sku, "lot_number": lot_num, "pallet_id": pallet,
-                    "expected_qty": expected, "priority": "Normal", "status": "Assigned",
-                    "created_ts": now_str(), "due_date": "", "notes": notes.strip(),
-                    "lock_owner": "", "lock_start_ts": "", "lock_expires_ts": ""
-                }
-                safe_append_csv(PATHS["assign"], row, ASSIGN_COLS); created += 1
-
-            st.session_state["assigned_by"] = assigned_by
-            st.session_state["assignee"] = assignee
-            if created > 0:
-                st.success(t("created_n", n=created, name=assignee)); queue_feedback("success")
-                if bulk_summary:
-                    st.info("Bulk expanded: " + "; ".join(bulk_summary))
-            if dup_conflicts:
-                sample = ", ".join(map(str, dup_conflicts[:10])) + ("â€¦" if len(dup_conflicts)>10 else "")
-                st.warning(t("dup_skipped", n=len(dup_conflicts), sample=sample))
-            if locked_conflicts:
-                st.warning(t("locked_skipped", n=len(locked_conflicts)))
-            if not_in_cache:
-                sample = ", ".join(map(str, not_in_cache[:10])) + ("â€¦" if len(not_in_cache)>10 else "")
-                st.info(t("not_in_cache", n=len(not_in_cache), sample=sample))
-
-    # Show all assignments (unchanged)
-    dfA = load_assignments()
-    if not dfA.empty:
-        def _lock_info(r):
-            if lock_active(r):
-                who = r.get("lock_owner","?"); until = r.get("lock_expires_ts","")
-                return t("locked_by_until", who=who, until=until)
-            return t("available")
-        dfA_disp = dfA.copy(); dfA_disp["lock_info"] = dfA_disp.apply(_lock_info, axis=1)
-        st.write(t("all_assign"))
-        show_table(dfA_disp, height=300, key="grid_all_assign")
-    else:
-        st.info(t("no_assign"))
+# ---------------- My Assignments
 with tabs[1]:
  st.subheader(t("my_title"))
  me = st.text_input(t("i_am"), key="me_name", value=st.session_state.get("assignee",""))
@@ -778,7 +650,7 @@ with tabs[1]:
    def _lock_info2(r):
     if lock_active(r):
      who = r.get("lock_owner","?"); until = r.get("lock_expires_ts","")
-     you = "You" if st.session_state.get("lang","en")=="en" else "TÃº"
+     you = "You" if st.session_state.get("lang","en")=="en" else "Tú"
      who_disp = you if (who or "").lower()==(me or "").lower() else who
      return t("locked_by_until", who=who_disp, until=until)
     return t("available")
@@ -795,7 +667,7 @@ with tabs[1]:
   else:
    opts = []
    for _, r in mine.iterrows():
-    label = f"{r.get('assignment_id','')} â€” {r.get('location','')} â€” {r.get('status','')}"
+    label = f"{r.get('assignment_id','')} — {r.get('location','')} — {r.get('status','')}"
     opts.append((label, r.get("assignment_id","")))
    if opts:
     def _fmt(val):
@@ -807,37 +679,175 @@ with tabs[1]:
  if selected_dict: st.session_state["pending_assignment"] = selected_dict
  pending = st.session_state.get("pending_assignment")
  if pending:
-     st.markdown(t("selected_summary", id=pending.get('assignment_id',''), loc=pending.get('location',''), status=pending.get('status','')))
-     if st.button(t("submit_assignment"), type="primary", key="my_submit_assignment_btn", use_container_width=True):
-         assign_id = pending.get("assignment_id","")
-         if not me:
-             st.error(t("err_enter_name")); queue_feedback("error")
-         else:
-             dfA2 = load_assignments()
-             row = dfA2[dfA2["assignment_id"]==assign_id]
-             if row.empty:
-                 st.error(t("err_missing")); queue_feedback("error")
-             else:
-                 r = row.iloc[0]
-                 if str(r.get("assignee","")).strip().lower() != str(me).strip().lower():
-                     st.error(t("err_belongs_to", assignee=r.get('assignee','?'))); queue_feedback("error")
-                 elif str(r.get("status","")).strip() == "Submitted":
-                     st.error(t("err_already_submitted")); queue_feedback("error")
-                 elif lock_active(r) and not lock_owned_by(r, me):
-                     st.error(t("err_locked_other", who=r.get('lock_owner','?'), until=r.get('lock_expires_ts','?'))); queue_feedback("error")
-                 else:
-                     ok, msg = start_or_renew_lock(assign_id, me)
-if not ok:
-    st.error(msg); queue_feedback("error")
-else:
-    st.session_state["current_assignment"] = r.to_dict()
-    st.success(t("lock_success_opening", msg=msg)); queue_feedback("success")
-    st.session_state["_navigate_to_tab"] = t("tab_perform")
-    switch_to_tab(t("tab_perform"))
-    st.rerun()
+  st.markdown(t("selected_summary", id=pending.get('assignment_id',''), loc=pending.get('location',''), status=pending.get('status','')))
+  if st.button(t("submit_assignment"), type="primary", key="my_submit_assignment_btn", use_container_width=True):
+   assign_id = pending.get("assignment_id","")
+   if not me:
+    st.error(t("err_enter_name")); queue_feedback("error")
+   else:
+    dfA2 = load_assignments()
+    row = dfA2[dfA2["assignment_id"]==assign_id]
+    if row.empty:
+      st.error(t("err_missing")); queue_feedback("error")
+    else:
+      r = row.iloc[0]
+      if str(r.get("assignee","")).strip().lower() != str(me).strip().lower():
+       st.error(t("err_belongs_to", assignee=r.get('assignee','?'))); queue_feedback("error")
+      elif str(r.get("status","")).strip() == "Submitted":
+       st.error(t("err_already_submitted")); queue_feedback("error")
+      elif lock_active(r) and not lock_owned_by(r, me):
+       st.error(t("err_locked_other", who=r.get('lock_owner','?'), until=r.get('lock_expires_ts','?'))); queue_feedback("error")
+      else:
+       ok, msg = start_or_renew_lock(assign_id, me)
+       if not ok:
+        st.error(msg); queue_feedback("error")
+       else:
+        st.session_state["current_assignment"] = r.to_dict()
+        st.success(t("lock_success_opening", msg=msg)); queue_feedback("success")
+        switch_to_tab(t("tab_perform"))
  else:
-     st.info(t("no_assign"))
+  st.info(t("no_assign"))
  emit_feedback()
+
+# ---------------- Perform Count (locked fields except Counted QTY + Note)
+with tabs[2]:
+ st.subheader(t("perform_title"))
+ t1, t2 = st.columns(2)
+ with t1: st.checkbox(t("auto_focus_loc"), key="auto_focus")
+ with t2: st.checkbox(t("auto_advance"), key="auto_advance")
+ auto_focus = st.session_state.get("auto_focus", True)
+ auto_advance= st.session_state.get("auto_advance", True)
+
+ def _hydrate_from_current(cur: dict):
+  exp_raw = cur.get("expected_qty","")
+  try: exp_int = int(float(exp_raw)) if str(exp_raw).strip() != "" else 0
+  except Exception: exp_int = 0
+  st.session_state.update({
+   "perform_assignment_id": cur.get("assignment_id",""),
+   "perform_assignee": cur.get("assignee", st.session_state.get("me_name","")),
+   "perform_location": cur.get("location",""),
+   "perform_pallet": cur.get("pallet_id",""),
+   "perform_sku": cur.get("sku",""),
+   "perform_lot": cur.get("lot_number",""),
+   "perform_expected": exp_int,
+   "perform_counted_str": st.session_state.get("perform_counted_str",""),
+  })
+
+ cur = st.session_state.get("current_assignment", {})
+ selected_id = cur.get("assignment_id", "")
+ loaded_from = st.session_state.get("_perform_loaded_from", "")
+ if selected_id and selected_id != loaded_from:
+  _hydrate_from_current(cur); st.session_state["_perform_loaded_from"] = selected_id
+ if cur and not st.session_state.get("perform_assignment_id"):
+  _hydrate_from_current(cur)
+ if selected_id: st.session_state["_perform_loaded_from"] = selected_id
+
+ assignment_id = st.text_input(t("assignment_id"), key="perform_assignment_id", disabled=True)
+ assignee = st.text_input(t("assignee"), key="perform_assignee", disabled=True)
+ c1, c2 = st.columns(2)
+ with c1:
+  location = st.text_input(t("scan_location"), key="perform_location", disabled=True)
+ with c2:
+  pallet = st.text_input(t("scan_pallet"), key="perform_pallet", disabled=True)
+ c3, c4, c5 = st.columns(3)
+ with c3:
+  sku = st.text_input(t("sku"), key="perform_sku", disabled=True)
+ with c4:
+  lot = st.text_input(t("lot"), key="perform_lot", disabled=True)
+ with c5:
+  expected_num = st.number_input(t("expected_qty"), min_value=0, key="perform_expected", disabled=True)
+ counted_str = st.text_input(t("counted_qty"), placeholder="", key="perform_counted_str")
+ note = st.text_input(t("note"), key="perform_note")
+
+ 
+issue_opts = ["None","Wrong Pallet ID","Wrong LOT Number","Location Empty","Damaged Pallet","Other"]
+issue_type = st.selectbox("Issue Type (optional)", issue_opts, index=0, key="perform_issue_type")
+_show_issue = st.session_state.get("perform_issue_type","None") != "None"
+actual_pallet = st.text_input("Actual Pallet ID (if issue)", key="perform_actual_pallet_id") if _show_issue else ""
+actual_lot = st.text_input("Actual LOT Number (if issue)", key="perform_actual_lot_number") if _show_issue else ""
+if auto_focus and not st.session_state.get("_did_autofocus"):
+  focus_by_label(t("counted_qty")); st.session_state["_did_autofocus"] = True
+
+ def _parse_count(s):
+  s = (s or "").strip()
+  if s == "": return None
+  if not re.fullmatch(r"\d+", s): return "invalid"
+  return int(s)
+
+ def _handle_submit():
+  assignment_id = st.session_state.get("perform_assignment_id","")
+  assignee = st.session_state.get("perform_assignee","")
+  location = st.session_state.get("perform_location","")
+  pallet = st.session_state.get("perform_pallet","")
+  sku = st.session_state.get("perform_sku","")
+  lot = st.session_state.get("perform_lot","")
+  note = st.session_state.get("perform_note","")
+  counted_str = st.session_state.get("perform_counted_str","")
+  counted_val = _parse_count(counted_str)
+  expected_num = st.session_state.get("perform_expected", 0)
+  if not assignee or not location:
+   st.session_state["_submit_msg"] = ("warn", t("warn_need_fields")); return
+  if counted_val in (None, "invalid"):
+   st.session_state["_submit_msg"] = ("warn", t("warn_count_invalid")); return
+  ok, why = validate_lock_for_submit(assignment_id, assignee)
+  if not ok:
+   st.session_state["_submit_msg"] = ("error", str(why)); return
+  variance = counted_val - expected_num if expected_num is not None else ""
+  row = {
+   "submission_id": mk_id("CCS"),
+   "assignment_id": assignment_id or "",
+   "assignee": assignee.strip(),
+   "location": location.strip(),
+   "sku": sku.strip(),
+   "lot_number": lot_normalize(lot),
+   "pallet_id": pallet.strip(),
+   "counted_qty": int(counted_val),
+   "expected_qty": int(expected_num) if expected_num is not None else "",
+   "variance": variance if variance != "" else "",
+   "variance_flag": ("Over" if variance>0 else ("Short" if variance<0 else "Match")),
+   "timestamp": now_str(),
+   "device_id": "",
+   "note": (note or "").strip(),
+ "issue_type": st.session_state.get("perform_issue_type","None"),
+ "actual_pallet_id": (st.session_state.get("perform_actual_pallet_id","") if st.session_state.get("perform_issue_type","None")!="None" else ""),
+ "actual_lot_number": (lot_normalize(st.session_state.get("perform_actual_lot_number","")) if st.session_state.get("perform_issue_type","None")!="None" else "")
+}
+  safe_append_csv(PATHS["subs"], row, SUBMIT_COLS)
+  dfA2 = load_assignments()
+  if assignment_id and not dfA2.empty:
+   ix = dfA2.index[dfA2["assignment_id"]==assignment_id]
+   if len(ix)>0:
+    dfA2.loc[ix, "status"] = "Submitted"
+    dfA2.loc[ix, ["lock_owner","lock_start_ts","lock_expires_ts"]] = ["","",""]
+    save_assignments(dfA2)
+  # success -> clear form + navigate back to "My Assignments"
+  for k in ["perform_assignment_id","perform_assignee","perform_location","perform_pallet","perform_sku",
+ "perform_lot","perform_expected","perform_counted_str","perform_note",
+ "perform_issue_type","perform_actual_pallet_id","perform_actual_lot_number",
+ "_did_autofocus","_perform_loaded_from"]:
+   if k in st.session_state: st.session_state.pop(k)
+  st.session_state["current_assignment"] = {}
+  st.session_state["pending_assignment"] = {}
+  st.session_state["_submit_msg"] = ("success", t("submitted_ok"))
+  queue_feedback("success")
+  st.session_state["_navigate_to_tab"] = t("tab_my")
+
+ st.button(t("submit_count"), type="primary", key="perform_submit_btn", use_container_width=True, on_click=_handle_submit)
+ msg = st.session_state.pop("_submit_msg", None)
+ if msg:
+  level, text = msg
+  if level=="success":
+   st.success(text)
+   # navigate to My Assignments then rerun
+   if st.session_state.get("_navigate_to_tab"):
+    switch_to_tab(st.session_state.pop("_navigate_to_tab"))
+   st.rerun()
+  elif level=="warn":
+   st.warning(text)
+  else:
+   st.error(text)
+ emit_feedback()
+
 # ---------------- Dashboard (Live)
 with tabs[3]:
     st.subheader(t("dash_title"))
@@ -954,3 +964,11 @@ CC_TZ=<IANA TZ, e.g. America/Chicago>""", language="bash")
     st.success(f"Saved mapping and cached {len(norm):,} rows."); st.rerun()
   except Exception as e:
    st.warning(t("excel_err", err=e))
+
+
+
+
+
+
+
+
