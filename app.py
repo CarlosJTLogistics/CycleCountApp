@@ -1,4 +1,4 @@
-﻿# v1.6.8
+﻿# v1.6.1
 # - TZ fix: use zoneinfo with CC_TZ (default America/Chicago) for all timestamps/locks/IDs
 # - Post-submit UX: clear fields and auto-return to My Assignments on success
 # - Download Submissions Log: buttons on Dashboard and Settings
@@ -14,13 +14,8 @@ import streamlit.components.v1 as components
 I18N = {
  "en": {
   "tab_assign": "Assign Counts",
-  "tab_my": "My Assignments",
-  "tab_perform": ""assign_to_name") or st.session_state.get("current_assignee") or st.session_state.get("assignee") or ""
-    st.session_state["current_assignee"] = _assignee_locked
-except Exception:
-    _assignee_locked = st.session_state.get("current_assignee","")
-assignee = st.text_input(t("assignee") if "t" in globals() else "Assignee", _assignee_locked, key="assignee_ro_perform", disabled=True)
-Perform Count",
+  "tab_lotlist": "LOT List", "tab_my": "My Assignments",
+  "tab_perform": "Perform Count",
   "tab_dash": "Dashboard (Live)",
   "tab_disc": "Discrepancies",
   "tab_settings": "Settings",
@@ -112,7 +107,7 @@ Perform Count",
  },
  "es": {
   "tab_assign": "Asignar Conteos",
-  "tab_my": "Mis Asignaciones",
+  "tab_lotlist": "Lista de LOT", "tab_my": "Mis Asignaciones",
   "tab_perform": "Realizar Conteo",
   "tab_dash": "Tablero (En Vivo)",
   "tab_disc": "Discrepancias",
@@ -225,7 +220,7 @@ except Exception:
  _AGGRID_IMPORTED = False
 
 APP_NAME = "Cycle Counting"
-VERSION = "v1.6.8 (Bulk: per-pallet only; TUN=racks)"
+VERSION = "v1.6.3 (Bulk: per-pallet only; TUN=racks; LOT List)"
 TZ_NAME = os.getenv("CC_TZ", "America/Chicago")
 TZ_LABEL = TZ_NAME
 LOCK_MINUTES_DEFAULT = 20
@@ -266,7 +261,7 @@ PATHS = get_paths()
 ASSIGN_COLS = [
  "assignment_id","assigned_by","assignee","location","sku","lot_number","pallet_id",
  "expected_qty","priority","status","created_ts","due_date","notes",
- "lock_owner","lock_start_ts","lock_expires_ts"
+ "lock_owner","lock_start_ts","lock_expires_ts","assignment_type"
 ]
 SUBMIT_COLS = [
  "submission_id","assignment_id","assignee","location","sku","lot_number","pallet_id",
@@ -321,7 +316,7 @@ def parse_ts(s: str):
 
 def load_assignments():
  df = read_csv_locked(PATHS["assign"], ASSIGN_COLS)
- for c in ["lock_owner","lock_start_ts","lock_expires_ts"]:
+ for c in ["lock_owner","lock_start_ts","lock_expires_ts","assignment_type"]:
   if c not in df.columns: df[c] = ""
  return df
 
@@ -555,9 +550,13 @@ with tabs[0]:
     with c_top1:
         assigned_by = st.text_input(t("assigned_by"), value=st.session_state.get("assigned_by",""), key="assign_assigned_by")
     with c_top2:
-        assignee = st.text_input(t("assign_to"), st.session_state.get("current_assignee",""), key="assignee_ro", disabled=True)
-
-    inv_df = load_cached_inventory()
+    assignee = st.selectbox(
+        t("assign_to"),
+        ASSIGN_NAME_OPTIONS,
+        index=(ASSIGN_NAME_OPTIONS.index(st.session_state.get("assignee","")) if st.session_state.get("assignee","") in ASSIGN_NAME_OPTIONS else 0),
+        key="assign_assignee_select"
+    )
+inv_df = load_cached_inventory()
     loc_options = []
     if inv_df is not None and hasattr(inv_df, "empty") and not inv_df.empty and "location" in inv_df.columns:
         loc_options = sorted(inv_df["location"].astype(str).str.strip().replace("nan","").dropna().unique().tolist())
@@ -808,37 +807,36 @@ with tabs[1]:
  if selected_dict: st.session_state["pending_assignment"] = selected_dict
  pending = st.session_state.get("pending_assignment")
  if pending:
-  st.markdown(t("selected_summary", id=pending.get('assignment_id',''), loc=pending.get('location',''), status=pending.get('status','')))
-  if st.button(t("submit_assignment"), type="primary", key="my_submit_assignment_btn", use_container_width=True):
-   assign_id = pending.get("assignment_id","")
-   if not me:
-    st.error(t("err_enter_name")); queue_feedback("error")
-   else:
-    dfA2 = load_assignments()
-    row = dfA2[dfA2["assignment_id"]==assign_id]
-    if row.empty:
-      st.error(t("err_missing")); queue_feedback("error")
-    else:
-      r = row.iloc[0]
-      if str(r.get("assignee","")).strip().lower() != str(me).strip().lower():
-       st.error(t("err_belongs_to", assignee=r.get('assignee','?'))); queue_feedback("error")
-      elif str(r.get("status","")).strip() == "Submitted":
-       st.error(t("err_already_submitted")); queue_feedback("error")
-      elif lock_active(r) and not lock_owned_by(r, me):
-       st.error(t("err_locked_other", who=r.get('lock_owner','?'), until=r.get('lock_expires_ts','?'))); queue_feedback("error")
-      else:
-       ok, msg = start_or_renew_lock(assign_id, me)
-       if not ok:
-        st.error(msg); queue_feedback("error")
-       else:
-        st.session_state["current_assignment"] = r.to_dict()
-        st.success(t("lock_success_opening", msg=msg)); queue_feedback("success")
-        switch_to_tab(t("tab_perform"))
- else:
-  st.info(t("no_assign"))
- emit_feedback()
-
-# ---------------- Perform Count (locked fields except Counted QTY + Note)
+  st.markdown(t("selected_summary", id=pending.get('assignment_id',''), loc=pending.get('location',''), status=pending.get('status','')))pending = st.session_state.get("pending_assignment")
+if pending:
+    if st.button(t("submit_assignment"), type="primary", key="my_submit_assignment_btn", use_container_width=True):
+        assign_id = pending.get("assignment_id","")
+        if not me:
+            st.error(t("err_enter_name")); queue_feedback("error")
+        else:
+            dfA2 = load_assignments()
+            row = dfA2[dfA2["assignment_id"]==assign_id]
+            if row.empty:
+                st.error(t("err_missing")); queue_feedback("error")
+            else:
+                r = row.iloc[0]
+                if str(r.get("assignee","")).strip().lower() != str(me).strip().lower():
+                    st.error(t("err_belongs_to", assignee=r.get('assignee','?'))); queue_feedback("error")
+                elif str(r.get("status","")).strip() == "Submitted":
+                    st.error(t("err_already_submitted")); queue_feedback("error")
+                elif lock_active(r) and not lock_owned_by(r, me):
+                    st.error(t("err_locked_other", who=r.get('lock_owner','?'), until=r.get('lock_expires_ts','?'))); queue_feedback("error")
+                else:
+                    ok, msg = start_or_renew_lock(assign_id, me)
+                    if not ok:
+                        st.error(msg); queue_feedback("error")
+                    else:
+                        st.session_state["current_assignment"] = r.to_dict()
+                        st.success(t("lock_success_opening", msg=msg)); queue_feedback("success")
+                        switch_to_tab(t("tab_perform"))
+else:
+    st.info(t("no_assign"))
+emit_feedback()# ---------------- Perform Count (locked fields except Counted QTY + Note)
 with tabs[2]:
     st.subheader(t("perform_title"))
     t1, t2 = st.columns(2)
@@ -878,7 +876,7 @@ with tabs[2]:
         st.session_state["_perform_loaded_from"] = selected_id
 
     assignment_id = st.text_input(t("assignment_id"), key="perform_assignment_id", disabled=True)
-    assignee = st.text_input(t("assignee"), st.session_state.get("current_assignee",""), key="assignee_ro", disabled=True)
+    assignee = st.text_input(t("assignee"), key="perform_assignee", disabled=True)
     c1, c2 = st.columns(2)
     with c1:
         location = st.text_input(t("scan_location"), key="perform_location", disabled=True)
@@ -1114,49 +1112,4 @@ CC_TZ=<IANA TZ, e.g. America/Chicago>""", language="bash")
     st.success(f"Saved mapping and cached {len(norm):,} rows."); st.rerun()
   except Exception as e:
    st.warning(t("excel_err", err=e))
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# Helper to read Assign Name (from session or default)
-def get_assign_name(default: str | None = None) -> str | None:
-    try:
-        import streamlit as st  # noqa: F401
-    except Exception:
-        return default
-    return st.session_state.get('assign_name', default)
-
-
-
-
-
-
-
-
-
-
-
 
