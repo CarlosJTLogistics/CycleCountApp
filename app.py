@@ -550,7 +550,12 @@ with tabs[0]:
     with c_top1:
         assigned_by = st.text_input(t("assigned_by"), value=st.session_state.get("assigned_by",""), key="assign_assigned_by")
     with c_top2:
-        assignee = st.selectbox(             t("assign_to"),             ASSIGN_NAME_OPTIONS,             index=(ASSIGN_NAME_OPTIONS.index(st.session_state.get("assignee","")) if st.session_state.get("assignee","") in ASSIGN_NAME_OPTIONS else 0),             key="assign_assignee_select"         )
+        assignee = st.selectbox(
+            t("assign_to"),
+            ASSIGN_NAME_OPTIONS,
+            index=(ASSIGN_NAME_OPTIONS.index(st.session_state.get("assignee","")) if st.session_state.get("assignee","") in ASSIGN_NAME_OPTIONS else 0),
+            key="assign_assignee_select"
+        )
     inv_df = load_cached_inventory()
     loc_options = []
     if inv_df is not None and hasattr(inv_df, "empty") and not inv_df.empty and "location" in inv_df.columns:
@@ -917,6 +922,7 @@ CC_TZ=<IANA TZ, e.g. America/Chicago>""", language="bash")
     st.success(f"Saved mapping and cached {len(norm):,} rows."); st.rerun()
   except Exception as e:
    st.warning(t("excel_err", err=e))
+
 
 
 
