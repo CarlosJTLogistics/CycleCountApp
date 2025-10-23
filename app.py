@@ -805,7 +805,37 @@ with tabs[1]:
     choice = st.radio(t("radio_label"), [v for _, v in opts], format_func=_fmt, key="my_assign_choice")
     if choice: selected_dict = mine[mine["assignment_id"]==choice].iloc[0].to_dict()
  if selected_dict: st.session_state["pending_assignment"] = selected_dict
- pending = st.session_state.get("pending_assignment")  if pending:      st.markdown(t("selected_summary", id=pending.get('assignment_id',''), loc=pending.get('location',''), status=pending.get('status','')))      if st.button(t("submit_assignment"), type="primary", key="my_submit_assignment_btn", use_container_width=True):          assign_id = pending.get("assignment_id","")          if not me:              st.error(t("err_enter_name")); queue_feedback("error")          else:              dfA2 = load_assignments()              row = dfA2[dfA2["assignment_id"]==assign_id]              if row.empty:                  st.error(t("err_missing")); queue_feedback("error")              else:                  r = row.iloc[0]                  if str(r.get("assignee","")).strip().lower() != str(me).strip().lower():                      st.error(t("err_belongs_to", assignee=r.get('assignee','?'))); queue_feedback("error")                  elif str(r.get("status","")).strip() == "Submitted":                      st.error(t("err_already_submitted")); queue_feedback("error")                  elif lock_active(r) and not lock_owned_by(r, me):                      st.error(t("err_locked_other", who=r.get('lock_owner','?'), until=r.get('lock_expires_ts','?'))); queue_feedback("error")                  else:                      ok, msg = start_or_renew_lock(assign_id, me)                      if not ok:                          st.error(msg); queue_feedback("error")                      else:                          st.session_state["current_assignment"] = r.to_dict()                          st.success(t("lock_success_opening", msg=msg)); queue_feedback("success")                          switch_to_tab(t("tab_perform"))  else:      st.info(t("no_assign"))  emit_feedback()
+ pending = st.session_state.get("pending_assignment")
+ if pending:
+     st.markdown(t("selected_summary", id=pending.get('assignment_id',''), loc=pending.get('location',''), status=pending.get('status','')))
+     if st.button(t("submit_assignment"), type="primary", key="my_submit_assignment_btn", use_container_width=True):
+         assign_id = pending.get("assignment_id","")
+         if not me:
+             st.error(t("err_enter_name")); queue_feedback("error")
+         else:
+             dfA2 = load_assignments()
+             row = dfA2[dfA2["assignment_id"]==assign_id]
+             if row.empty:
+                 st.error(t("err_missing")); queue_feedback("error")
+             else:
+                 r = row.iloc[0]
+                 if str(r.get("assignee","")).strip().lower() != str(me).strip().lower():
+                     st.error(t("err_belongs_to", assignee=r.get('assignee','?'))); queue_feedback("error")
+                 elif str(r.get("status","")).strip() == "Submitted":
+                     st.error(t("err_already_submitted")); queue_feedback("error")
+                 elif lock_active(r) and not lock_owned_by(r, me):
+                     st.error(t("err_locked_other", who=r.get('lock_owner','?'), until=r.get('lock_expires_ts','?'))); queue_feedback("error")
+                 else:
+                     ok, msg = start_or_renew_lock(assign_id, me)
+                     if not ok:
+                         st.error(msg); queue_feedback("error")
+                     else:
+                         st.session_state["current_assignment"] = r.to_dict()
+                         st.success(t("lock_success_opening", msg=msg)); queue_feedback("success")
+                         switch_to_tab(t("tab_perform"))
+ else:
+     st.info(t("no_assign"))
+ emit_feedback()
 # ---------------- Dashboard (Live)
 with tabs[3]:
     st.subheader(t("dash_title"))
@@ -922,6 +952,7 @@ CC_TZ=<IANA TZ, e.g. America/Chicago>""", language="bash")
     st.success(f"Saved mapping and cached {len(norm):,} rows."); st.rerun()
   except Exception as e:
    st.warning(t("excel_err", err=e))
+
 
 
 
