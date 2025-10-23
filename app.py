@@ -1,4 +1,4 @@
-﻿# v1.6.1
+﻿# v1.6.2
 # - TZ fix: use zoneinfo with CC_TZ (default America/Chicago) for all timestamps/locks/IDs
 # - Post-submit UX: clear fields and auto-return to My Assignments on success
 # - Download Submissions Log: buttons on Dashboard and Settings
@@ -220,7 +220,7 @@ except Exception:
  _AGGRID_IMPORTED = False
 
 APP_NAME = "Cycle Counting"
-VERSION = "v1.6.1 (Bulk: per-pallet only; TUN=racks)"
+VERSION = "v1.6.2 (Bulk: per-pallet only; TUN=racks)"
 TZ_NAME = os.getenv("CC_TZ", "America/Chicago")
 TZ_LABEL = TZ_NAME
 LOCK_MINUTES_DEFAULT = 20
@@ -873,7 +873,7 @@ with tabs[2]:
         st.session_state["_perform_loaded_from"] = selected_id
 
     assignment_id = st.text_input(t("assignment_id"), key="perform_assignment_id", disabled=True)
-    assignee = st.text_input(t("assignee"), key="perform_assignee", disabled=True)
+    assignee = st.selectbox(t("assignee"), ASSIGN_NAME_OPTIONS, key="assign_name")
     c1, c2 = st.columns(2)
     with c1:
         location = st.text_input(t("scan_location"), key="perform_location", disabled=True)
@@ -1133,4 +1133,14 @@ CC_TZ=<IANA TZ, e.g. America/Chicago>""", language="bash")
 
 
 
+
+
+
+# Helper to read Assign Name (from session or default)
+def get_assign_name(default: str | None = None) -> str | None:
+    try:
+        import streamlit as st  # noqa: F401
+    except Exception:
+        return default
+    return st.session_state.get('assign_name', default)
 
