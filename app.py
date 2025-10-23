@@ -219,7 +219,7 @@ except Exception:
  _AGGRID_IMPORTED = False
 
 APP_NAME = "Cycle Counting"
-VERSION = "v1.6.1 (hide submitted in My Assignments + show Notes in Dashboard)"
+VERSION = "v1.6.2 (Issue Type + Actual IDs)""
 TZ_NAME = os.getenv("CC_TZ", "America/Chicago")
 TZ_LABEL = TZ_NAME
 LOCK_MINUTES_DEFAULT = 20
@@ -264,7 +264,8 @@ ASSIGN_COLS = [
 ]
 SUBMIT_COLS = [
  "submission_id","assignment_id","assignee","location","sku","lot_number","pallet_id",
- "counted_qty","expected_qty","variance","variance_flag","timestamp","device_id","note"
+ "counted_qty","expected_qty","variance","variance_flag","timestamp","device_id","note",
+ "issue_type","actual_pallet_id","actual_lot_number"
 ]
 
 _ENCODINGS = ["utf-8", "cp1252", "latin-1"]
@@ -758,7 +759,13 @@ with tabs[2]:
  counted_str = st.text_input(t("counted_qty"), placeholder="", key="perform_counted_str")
  note = st.text_input(t("note"), key="perform_note")
 
- if auto_focus and not st.session_state.get("_did_autofocus"):
+ 
+issue_opts = ["None","Wrong Pallet ID","Wrong LOT Number","Location Empty","Damaged Pallet","Other"]
+issue_type = st.selectbox("Issue Type (optional)", issue_opts, index=0, key="perform_issue_type")
+_show_issue = st.session_state.get("perform_issue_type","None") != "None"
+actual_pallet = st.text_input("Actual Pallet ID (if issue)", key="perform_actual_pallet_id") if _show_issue else ""
+actual_lot = st.text_input("Actual LOT Number (if issue)", key="perform_actual_lot_number") if _show_issue else ""
+if auto_focus and not st.session_state.get("_did_autofocus"):
   focus_by_label(t("counted_qty")); st.session_state["_did_autofocus"] = True
 
  def _parse_count(s):
@@ -801,7 +808,10 @@ with tabs[2]:
    "timestamp": now_str(),
    "device_id": "",
    "note": (note or "").strip(),
-  }
+ "issue_type": st.session_state.get("perform_issue_type","None"),
+ "actual_pallet_id": (st.session_state.get("perform_actual_pallet_id","") if st.session_state.get("perform_issue_type","None")!="None" else ""),
+ "actual_lot_number": (lot_normalize(st.session_state.get("perform_actual_lot_number","")) if st.session_state.get("perform_issue_type","None")!="None" else "")
+}
   safe_append_csv(PATHS["subs"], row, SUBMIT_COLS)
   dfA2 = load_assignments()
   if assignment_id and not dfA2.empty:
@@ -812,7 +822,9 @@ with tabs[2]:
     save_assignments(dfA2)
   # success -> clear form + navigate back to "My Assignments"
   for k in ["perform_assignment_id","perform_assignee","perform_location","perform_pallet","perform_sku",
-            "perform_lot","perform_expected","perform_counted_str","perform_note","_did_autofocus","_perform_loaded_from"]:
+ "perform_lot","perform_expected","perform_counted_str","perform_note",
+ "perform_issue_type","perform_actual_pallet_id","perform_actual_lot_number",
+ "_did_autofocus","_perform_loaded_from"]:
    if k in st.session_state: st.session_state.pop(k)
   st.session_state["current_assignment"] = {}
   st.session_state["pending_assignment"] = {}
@@ -856,7 +868,7 @@ with tabs[3]:
     dfS_disp = dfS.copy()
     # Compact/mobile view keeps a minimal readable set incl. Notes
     if st.session_state.get("mobile_mode", True) and not dfS_disp.empty:
-        keep = [c for c in ["timestamp","assignee","location","counted_qty","expected_qty","variance","variance_flag","note"] if c in dfS_disp.columns]
+        keep = [c for c in ["timestamp","assignee","location","counted_qty","expected_qty","variance","variance_flag","note","issue_type","actual_pallet_id","actual_lot_number"] if c in dfS_disp.columns]
         if keep:
             dfS_disp = dfS_disp[keep]
 
@@ -883,7 +895,7 @@ with tabs[4]:
  ex = dfS[dfS["variance_flag"].isin(["Over","Short"])]
  ex_disp = ex.copy()
  if st.session_state.get("mobile_mode", True) and not ex_disp.empty:
-  keep = [c for c in ["timestamp","assignee","location","counted_qty","expected_qty","variance","variance_flag","note"] if c in ex_disp.columns]
+  keep = [c for c in ["timestamp","assignee","location","counted_qty","expected_qty","variance","variance_flag","note","issue_type","actual_pallet_id","actual_lot_number"] if c in ex_disp.columns]
   if keep: ex_disp = ex_disp[keep]
  st.write(t("exceptions"))
  show_table(ex_disp, height=300, key="grid_exceptions", numeric_cols=["variance"])
@@ -952,6 +964,8 @@ CC_TZ=<IANA TZ, e.g. America/Chicago>""", language="bash")
     st.success(f"Saved mapping and cached {len(norm):,} rows."); st.rerun()
   except Exception as e:
    st.warning(t("excel_err", err=e))
+
+
 
 
 
