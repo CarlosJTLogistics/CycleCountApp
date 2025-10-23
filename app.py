@@ -1,4 +1,4 @@
-# v1.6.1
+﻿# v1.6.1
 # - TZ fix: use zoneinfo with CC_TZ (default America/Chicago) for all timestamps/locks/IDs
 # - Post-submit UX: clear fields and auto-return to My Assignments on success
 # - Download Submissions Log: buttons on Dashboard and Settings
@@ -26,11 +26,11 @@ I18N = {
   "minutes": "min",
   "lang": "Language / Idioma",
   "lang_en": "English (EN)",
-  "lang_es": "Español (ES)",
+  "lang_es": "EspaÃ±ol (ES)",
   "assign_title": "Assign Counts",
   "assigned_by": "Assigned by",
   "assign_to": "Assign to (name)",
-  "hint_assign": "Select multiple locations and/or paste a list. Other fields auto‑fill from the inventory cache.",
+  "hint_assign": "Select multiple locations and/or paste a list. Other fields autoâ€‘fill from the inventory cache.",
   "locations": "Locations",
   "paste_locs": "Paste locations (optional)",
   "notes": "Notes (optional)",
@@ -42,7 +42,7 @@ I18N = {
   "locked_skipped": "Skipped {n} location(s) currently locked by another user.",
   "not_in_cache": "{n} location(s) not in inventory cache (FYI): {sample}",
   "available": "Available",
-  "locked_by_until": "🔒 {who} until {until}",
+  "locked_by_until": "ðŸ”’ {who} until {until}",
   "my_title": "My Assignments",
   "i_am": "I am (name)",
   "open": "Open",
@@ -51,14 +51,14 @@ I18N = {
   "total": "Total",
   "your_assign": "Your Assignments",
   "radio_label": "Select an assignment",
-  "selected_summary": "**Selected:** `{id}` — **Location:** `{loc}` — **Status:** `{status}`",
+  "selected_summary": "**Selected:** `{id}` â€” **Location:** `{loc}` â€” **Status:** `{status}`",
   "submit_assignment": "Submit Assignment (Open Perform Count)",
   "err_enter_name": "Enter your name above to continue.",
   "err_missing": "Assignment no longer exists.",
   "err_belongs_to": "This assignment belongs to {assignee}.",
   "err_already_submitted": "This assignment is already Submitted.",
   "err_locked_other": "Locked by {who} until {until}",
-  "lock_success_opening": "{msg} — Opening Perform Count…",
+  "lock_success_opening": "{msg} â€” Opening Perform Countâ€¦",
   "tip_submit_once": "Tip: Click an assignment, then press 'Submit Assignment' to open Perform Count.",
   "perform_title": "Perform Count",
   "auto_focus_loc": "Auto-focus Location",
@@ -91,7 +91,7 @@ I18N = {
   "env_vars": "Environment variables (optional):",
   "tip_dir": "Tip: point CYCLE_COUNT_LOG_DIR to your OneDrive JT Logistics folder so counters and your dashboard use the same files.",
   "active_paths": "Active paths:",
-  "inv_upload_title": "Inventory Excel — Upload & Map",
+  "inv_upload_title": "Inventory Excel â€” Upload & Map",
   "inv_cache_loaded": "Inventory cache loaded: {n} rows",
   "preview_first10": "Preview (first 10 rows):",
   "column_mapping": "Column Mapping",
@@ -111,31 +111,31 @@ I18N = {
   "tab_perform": "Realizar Conteo",
   "tab_dash": "Tablero (En Vivo)",
   "tab_disc": "Discrepancias",
-  "tab_settings": "Configuración",
-  "app_name": "Conteo Cíclico",
+  "tab_settings": "ConfiguraciÃ³n",
+  "app_name": "Conteo CÃ­clico",
   "active_dir": "Carpeta de registros",
   "tz": "Zona horaria",
   "lock": "Bloqueo",
   "minutes": "min",
   "lang": "Idioma / Language",
   "lang_en": "English (EN)",
-  "lang_es": "Español (ES)",
+  "lang_es": "EspaÃ±ol (ES)",
   "assign_title": "Asignar Conteos",
   "assigned_by": "Asignado por",
   "assign_to": "Asignar a (nombre)",
-  "hint_assign": "Seleccione varias ubicaciones y/o pegue una lista. Los demás campos se completan desde el inventario.",
+  "hint_assign": "Seleccione varias ubicaciones y/o pegue una lista. Los demÃ¡s campos se completan desde el inventario.",
   "locations": "Ubicaciones",
   "paste_locs": "Pegar ubicaciones (opcional)",
   "notes": "Notas (opcional)",
   "create_assign": "Crear Asignaciones",
   "all_assign": "Todas las Asignaciones",
-  "no_assign": "Aún no hay asignaciones.",
-  "created_n": "Se crearon {n} asignación(es) para {name}.",
+  "no_assign": "AÃºn no hay asignaciones.",
+  "created_n": "Se crearon {n} asignaciÃ³n(es) para {name}.",
   "dup_skipped": "Omitidas {n} ubicaciones duplicadas ya Asignadas/En Progreso: {sample}",
   "locked_skipped": "Omitidas {n} ubicaciones actualmente bloqueadas por otro usuario.",
-  "not_in_cache": "{n} ubicación(es) no están en el inventario (FYI): {sample}",
+  "not_in_cache": "{n} ubicaciÃ³n(es) no estÃ¡n en el inventario (FYI): {sample}",
   "available": "Disponible",
-  "locked_by_until": "🔒 {who} hasta {until}",
+  "locked_by_until": "ðŸ”’ {who} hasta {until}",
   "my_title": "Mis Asignaciones",
   "i_am": "Yo soy (nombre)",
   "open": "Abiertas",
@@ -143,60 +143,60 @@ I18N = {
   "submitted": "Enviadas",
   "total": "Total",
   "your_assign": "Tus Asignaciones",
-  "radio_label": "Selecciona una asignación",
-  "selected_summary": "**Seleccionada:** `{id}` — **Ubicación:** `{loc}` — **Estado:** `{status}`",
-  "submit_assignment": "Enviar Asignación (Abrir Realizar Conteo)",
+  "radio_label": "Selecciona una asignaciÃ³n",
+  "selected_summary": "**Seleccionada:** `{id}` â€” **UbicaciÃ³n:** `{loc}` â€” **Estado:** `{status}`",
+  "submit_assignment": "Enviar AsignaciÃ³n (Abrir Realizar Conteo)",
   "err_enter_name": "Ingresa tu nombre arriba para continuar.",
-  "err_missing": "La asignación ya no existe.",
-  "err_belongs_to": "Esta asignación pertenece a {assignee}.",
-  "err_already_submitted": "Esta asignación ya fue Enviada.",
+  "err_missing": "La asignaciÃ³n ya no existe.",
+  "err_belongs_to": "Esta asignaciÃ³n pertenece a {assignee}.",
+  "err_already_submitted": "Esta asignaciÃ³n ya fue Enviada.",
   "err_locked_other": "Bloqueada por {who} hasta {until}",
-  "lock_success_opening": "{msg} — Abriendo Realizar Conteo…",
-  "tip_submit_once": "Tip: Haz clic en una asignación y luego en 'Enviar Asignación' para abrir Realizar Conteo.",
+  "lock_success_opening": "{msg} â€” Abriendo Realizar Conteoâ€¦",
+  "tip_submit_once": "Tip: Haz clic en una asignaciÃ³n y luego en 'Enviar AsignaciÃ³n' para abrir Realizar Conteo.",
   "perform_title": "Realizar Conteo",
-  "auto_focus_loc": "Autoenfocar Ubicación",
-  "auto_advance": "Avanzar automáticamente después del escaneo",
-  "assignment_id": "ID de Asignación",
+  "auto_focus_loc": "Autoenfocar UbicaciÃ³n",
+  "auto_advance": "Avanzar automÃ¡ticamente despuÃ©s del escaneo",
+  "assignment_id": "ID de AsignaciÃ³n",
   "assignee": "Asignado a",
-  "scan_location": "Escanear Ubicación",
+  "scan_location": "Escanear UbicaciÃ³n",
   "scan_pallet": "Escanear ID de Tarima (opcional)",
   "sku": "SKU (opcional)",
-  "lot": "Número de Lote (opcional)",
-  "expected_qty": "Cantidad Esperada (de Asignación/Inventario)",
+  "lot": "NÃºmero de Lote (opcional)",
+  "expected_qty": "Cantidad Esperada (de AsignaciÃ³n/Inventario)",
   "counted_qty": "Cantidad Contada",
   "note": "Nota (opcional)",
   "submit_count": "Enviar Conteo",
-  "warn_need_fields": "Se requieren Asignado a y Ubicación.",
-  "warn_count_invalid": "Ingresa un entero válido (no negativo) para Cantidad Contada.",
+  "warn_need_fields": "Se requieren Asignado a y UbicaciÃ³n.",
+  "warn_count_invalid": "Ingresa un entero vÃ¡lido (no negativo) para Cantidad Contada.",
   "submitted_ok": "Enviado",
   "dash_title": "Tablero (En Vivo)",
   "auto_refresh_sec": "Auto-actualizar cada (segundos)",
-  "subs_file": "Archivo de Envíos",
+  "subs_file": "Archivo de EnvÃ­os",
   "counts_today": "Conteos Hoy",
   "over": "Sobrante",
   "short": "Faltante",
   "match": "Igual",
-  "latest_subs": "Envíos Recientes",
+  "latest_subs": "EnvÃ­os Recientes",
   "disc_title": "Discrepancias",
   "exceptions": "Excepciones",
   "export_ex": "Exportar CSV de Excepciones",
-  "settings_title": "Configuración",
+  "settings_title": "ConfiguraciÃ³n",
   "env_vars": "Variables de entorno (opcional):",
   "tip_dir": "Tip: apunta CYCLE_COUNT_LOG_DIR a tu carpeta de OneDrive JT Logistics para compartir archivos.",
   "active_paths": "Rutas activas:",
-  "inv_upload_title": "Inventario Excel — Cargar y Mapear",
+  "inv_upload_title": "Inventario Excel â€” Cargar y Mapear",
   "inv_cache_loaded": "Inventario cargado: {n} filas",
   "preview_first10": "Vista previa (primeras 10 filas):",
   "column_mapping": "Mapeo de Columnas",
-  "map_loc": "Ubicación",
+  "map_loc": "UbicaciÃ³n",
   "map_sku": "SKU",
-  "map_lot": "Número de Lote",
+  "map_lot": "NÃºmero de Lote",
   "map_pal": "ID de Tarima",
   "map_qty": "Cantidad Esperada",
   "save_map": "Guardar Mapeo y Cachear Inventario",
   "excel_err": "Error al cargar/mapear Excel: {err}",
   "no_data": "Sin datos",
-  "download_subs": "Descargar Registro de Envíos"
+  "download_subs": "Descargar Registro de EnvÃ­os"
  },
 }
 def _lang_default():
@@ -495,7 +495,7 @@ def emit_feedback():
  </script>
  """, height=0)
 
-# ✅ Correct name here:
+# âœ… Correct name here:
 AGGRID_ENABLED = (os.getenv("AGGRID_ENABLED","1") == "1") and _AGGRID_IMPORTED
 
 def show_table(df, height=300, key=None, selectable=False, selection_mode="single", numeric_cols=None):
@@ -538,7 +538,7 @@ with right:
     if sel[0] != st.session_state.get("lang","en"):
         st.session_state["lang"] = sel[0]; st.rerun()
 st.caption(t("tip_submit_once"))
-st.caption(f"{t('active_dir')}: {PATHS['root']} · {t('tz')}: {TZ_LABEL} · {t('lock')}: {LOCK_MINUTES} {t('minutes')}")
+st.caption(f"{t('active_dir')}: {PATHS['root']} Â· {t('tz')}: {TZ_LABEL} Â· {t('lock')}: {LOCK_MINUTES} {t('minutes')}")
 
 TAB_LABELS = [t("tab_assign"), t("tab_my"), t("tab_perform"), t("tab_dash"), t("tab_disc"), t("tab_settings")]
 tabs = st.tabs(TAB_LABELS)
@@ -556,12 +556,7 @@ with tabs[0]:
             index=(ASSIGN_NAME_OPTIONS.index(st.session_state.get("assignee","")) if st.session_state.get("assignee","") in ASSIGN_NAME_OPTIONS else 0),
             key="assign_assignee_select"
         )
-        t("assign_to"),
-        ASSIGN_NAME_OPTIONS,
-        index=(ASSIGN_NAME_OPTIONS.index(st.session_state.get("assignee","")) if st.session_state.get("assignee","") in ASSIGN_NAME_OPTIONS else 0),
-        key="assign_assignee_select"
-    )
-inv_df = load_cached_inventory()
+    inv_df = load_cached_inventory()
     loc_options = []
     if inv_df is not None and hasattr(inv_df, "empty") and not inv_df.empty and "location" in inv_df.columns:
         loc_options = sorted(inv_df["location"].astype(str).str.strip().replace("nan","").dropna().unique().tolist())
@@ -699,7 +694,7 @@ inv_df = load_cached_inventory()
                         }
                         safe_append_csv(PATHS["assign"], row, ASSIGN_COLS); created += 1; made += 1
                     if made > 0:
-                        bulk_summary.append(f"{loc_s} → {made} pallet assignments")
+                        bulk_summary.append(f"{loc_s} â†’ {made} pallet assignments")
                         continue
                 # ---- Racks (8-digit or TUN): single location assignment
                 is_dup = False
@@ -745,12 +740,12 @@ inv_df = load_cached_inventory()
                 if bulk_summary:
                     st.info("Bulk expanded: " + "; ".join(bulk_summary))
             if dup_conflicts:
-                sample = ", ".join(map(str, dup_conflicts[:10])) + ("…" if len(dup_conflicts)>10 else "")
+                sample = ", ".join(map(str, dup_conflicts[:10])) + ("â€¦" if len(dup_conflicts)>10 else "")
                 st.warning(t("dup_skipped", n=len(dup_conflicts), sample=sample))
             if locked_conflicts:
                 st.warning(t("locked_skipped", n=len(locked_conflicts)))
             if not_in_cache:
-                sample = ", ".join(map(str, not_in_cache[:10])) + ("…" if len(not_in_cache)>10 else "")
+                sample = ", ".join(map(str, not_in_cache[:10])) + ("â€¦" if len(not_in_cache)>10 else "")
                 st.info(t("not_in_cache", n=len(not_in_cache), sample=sample))
 
     # Show all assignments (unchanged)
@@ -783,7 +778,7 @@ with tabs[1]:
    def _lock_info2(r):
     if lock_active(r):
      who = r.get("lock_owner","?"); until = r.get("lock_expires_ts","")
-     you = "You" if st.session_state.get("lang","en")=="en" else "Tú"
+     you = "You" if st.session_state.get("lang","en")=="en" else "TÃº"
      who_disp = you if (who or "").lower()==(me or "").lower() else who
      return t("locked_by_until", who=who_disp, until=until)
     return t("available")
@@ -800,7 +795,7 @@ with tabs[1]:
   else:
    opts = []
    for _, r in mine.iterrows():
-    label = f"{r.get('assignment_id','')} — {r.get('location','')} — {r.get('status','')}"
+    label = f"{r.get('assignment_id','')} â€” {r.get('location','')} â€” {r.get('status','')}"
     opts.append((label, r.get("assignment_id","")))
    if opts:
     def _fmt(val):
@@ -1117,6 +1112,7 @@ CC_TZ=<IANA TZ, e.g. America/Chicago>""", language="bash")
     st.success(f"Saved mapping and cached {len(norm):,} rows."); st.rerun()
   except Exception as e:
    st.warning(t("excel_err", err=e))
+
 
 
 
