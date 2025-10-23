@@ -550,7 +550,7 @@ with tabs[0]:
     with c_top1:
         assigned_by = st.text_input(t("assigned_by"), value=st.session_state.get("assigned_by",""), key="assign_assigned_by")
     with c_top2:
-        assignee = st.selectbox(t("assign_to"), ASSIGN_NAME_OPTIONS, key="assign_to_name"), key="assign_assignee")
+        assignee = st.selectbox(t("assign_to"), ASSIGN_NAME_OPTIONS, key="assign_to_name")
 
     inv_df = load_cached_inventory()
     loc_options = []
@@ -1143,6 +1143,7 @@ def get_assign_name(default: str | None = None) -> str | None:
     except Exception:
         return default
     return st.session_state.get('assign_name', default)
+
 
 
 
