@@ -15,7 +15,14 @@ I18N = {
  "en": {
   "tab_assign": "Assign Counts",
   "tab_my": "My Assignments",
-  "tab_perform": "Perform Count",
+  "tab_perform": "# __ASSIGNEE_LOCKED__: injected by automation to keep assignee fixed on Perform Count
+try:
+    _assignee_locked = st.session_state.get("assign_to_name") or st.session_state.get("current_assignee") or st.session_state.get("assignee") or ""
+    st.session_state["current_assignee"] = _assignee_locked
+except Exception:
+    _assignee_locked = st.session_state.get("current_assignee","")
+assignee = st.text_input(t("assignee") if "t" in globals() else "Assignee", _assignee_locked, key="assignee_ro_perform", disabled=True)
+Perform Count",
   "tab_dash": "Dashboard (Live)",
   "tab_disc": "Discrepancies",
   "tab_settings": "Settings",
@@ -1143,6 +1150,7 @@ def get_assign_name(default: str | None = None) -> str | None:
     except Exception:
         return default
     return st.session_state.get('assign_name', default)
+
 
 
 
