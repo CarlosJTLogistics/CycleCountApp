@@ -219,7 +219,7 @@ except Exception:
  _AGGRID_IMPORTED = False
 
 APP_NAME = "Cycle Counting"
-VERSION = "v1.6.2 (Issue Type + Actual IDs)"
+VERSION = "v1.6.3 (Archive Submitted Assignments)""
 TZ_NAME = os.getenv("CC_TZ", "America/Chicago")
 TZ_LABEL = TZ_NAME
 LOCK_MINUTES_DEFAULT = 20
@@ -985,6 +985,8 @@ CC_TZ=<IANA TZ, e.g. America/Chicago>""", language="bash")
     st.success(f"Saved mapping and cached {len(norm):,} rows."); st.rerun()
   except Exception as e:
    st.warning(t("excel_err", err=e))
+
+
 
 
 
