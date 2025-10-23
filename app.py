@@ -1,4 +1,4 @@
-﻿# v1.6.1
+# v1.6.1
 # - TZ fix: use zoneinfo with CC_TZ (default America/Chicago) for all timestamps/locks/IDs
 # - Post-submit UX: clear fields and auto-return to My Assignments on success
 # - Download Submissions Log: buttons on Dashboard and Settings
@@ -550,7 +550,12 @@ with tabs[0]:
     with c_top1:
         assigned_by = st.text_input(t("assigned_by"), value=st.session_state.get("assigned_by",""), key="assign_assigned_by")
     with c_top2:
-    assignee = st.selectbox(
+        assignee = st.selectbox(
+            t("assign_to"),
+            ASSIGN_NAME_OPTIONS,
+            index=(ASSIGN_NAME_OPTIONS.index(st.session_state.get("assignee","")) if st.session_state.get("assignee","") in ASSIGN_NAME_OPTIONS else 0),
+            key="assign_assignee_select"
+        )
         t("assign_to"),
         ASSIGN_NAME_OPTIONS,
         index=(ASSIGN_NAME_OPTIONS.index(st.session_state.get("assignee","")) if st.session_state.get("assignee","") in ASSIGN_NAME_OPTIONS else 0),
