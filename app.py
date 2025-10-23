@@ -807,195 +807,35 @@ with tabs[1]:
  if selected_dict: st.session_state["pending_assignment"] = selected_dict
  pending = st.session_state.get("pending_assignment")
  if pending:
-  st.markdown(t("selected_summary", id=pending.get('assignment_id',''), loc=pending.get('location',''), status=pending.get('status','')))pending = st.session_state.get("pending_assignment")
-if pending:
-    if st.button(t("submit_assignment"), type="primary", key="my_submit_assignment_btn", use_container_width=True):
-        assign_id = pending.get("assignment_id","")
-        if not me:
-            st.error(t("err_enter_name")); queue_feedback("error")
-        else:
-            dfA2 = load_assignments()
-            row = dfA2[dfA2["assignment_id"]==assign_id]
-            if row.empty:
-                st.error(t("err_missing")); queue_feedback("error")
-            else:
-                r = row.iloc[0]
-                if str(r.get("assignee","")).strip().lower() != str(me).strip().lower():
-                    st.error(t("err_belongs_to", assignee=r.get('assignee','?'))); queue_feedback("error")
-                elif str(r.get("status","")).strip() == "Submitted":
-                    st.error(t("err_already_submitted")); queue_feedback("error")
-                elif lock_active(r) and not lock_owned_by(r, me):
-                    st.error(t("err_locked_other", who=r.get('lock_owner','?'), until=r.get('lock_expires_ts','?'))); queue_feedback("error")
-                else:
-                    ok, msg = start_or_renew_lock(assign_id, me)
-                    if not ok:
-                        st.error(msg); queue_feedback("error")
-                    else:
-                        st.session_state["current_assignment"] = r.to_dict()
-                        st.success(t("lock_success_opening", msg=msg)); queue_feedback("success")
-                        switch_to_tab(t("tab_perform"))
-else:
-    st.info(t("no_assign"))
-emit_feedback()# ---------------- Perform Count (locked fields except Counted QTY + Note)
-with tabs[2]:
-    st.subheader(t("perform_title"))
-    t1, t2 = st.columns(2)
-    with t1:
-        st.checkbox(t("auto_focus_loc"), key="auto_focus")
-    with t2:
-        st.checkbox(t("auto_advance"), key="auto_advance")
-    auto_focus = st.session_state.get("auto_focus", True)
-    auto_advance = st.session_state.get("auto_advance", True)
-
-    def _hydrate_from_current(cur: dict):
-        exp_raw = cur.get("expected_qty","")
-        try:
-            exp_int = int(float(exp_raw)) if str(exp_raw).strip() != "" else 0
-        except Exception:
-            exp_int = 0
-        st.session_state.update({
-            "perform_assignment_id": cur.get("assignment_id",""),
-            "perform_assignee": cur.get("assignee", st.session_state.get("me_name","")),
-            "perform_location": cur.get("location",""),
-            "perform_pallet": cur.get("pallet_id",""),
-            "perform_sku": cur.get("sku",""),
-            "perform_lot": cur.get("lot_number",""),
-            "perform_expected": exp_int,
-            "perform_counted_str": st.session_state.get("perform_counted_str",""),
-        })
-
-    cur = st.session_state.get("current_assignment", {})
-    selected_id = cur.get("assignment_id", "")
-    loaded_from = st.session_state.get("_perform_loaded_from", "")
-    if selected_id and selected_id != loaded_from:
-        _hydrate_from_current(cur)
-        st.session_state["_perform_loaded_from"] = selected_id
-    if cur and not st.session_state.get("perform_assignment_id"):
-        _hydrate_from_current(cur)
-    if selected_id:
-        st.session_state["_perform_loaded_from"] = selected_id
-
-    assignment_id = st.text_input(t("assignment_id"), key="perform_assignment_id", disabled=True)
-    assignee = st.text_input(t("assignee"), key="perform_assignee", disabled=True)
-    c1, c2 = st.columns(2)
-    with c1:
-        location = st.text_input(t("scan_location"), key="perform_location", disabled=True)
-    with c2:
-        pallet = st.text_input(t("scan_pallet"), key="perform_pallet", disabled=True)
-    c3, c4, c5 = st.columns(3)
-    with c3:
-        sku = st.text_input(t("sku"), key="perform_sku", disabled=True)
-    with c4:
-        lot = st.text_input(t("lot"), key="perform_lot", disabled=True)
-    with c5:
-        expected_num = st.number_input(t("expected_qty"), min_value=0, key="perform_expected", disabled=True)
-
-    counted_str = st.text_input(t("counted_qty"), placeholder="", key="perform_counted_str")
-    note = st.text_input(t("note"), key="perform_note")
-
-    # New: Issue capture (simple & optional)
-    issue_opts = ["None","Wrong Pallet ID","Wrong LOT Number","Location Empty","Damaged Pallet","Other"]
-    issue_type = st.selectbox("Issue Type (optional)", issue_opts, index=0, key="perform_issue_type")
-    show_issue = st.session_state.get("perform_issue_type","None") != "None"
-    actual_pallet = st.text_input("Actual Pallet ID (if issue)", key="perform_actual_pallet_id") if show_issue else ""
-    actual_lot = st.text_input("Actual LOT Number (if issue)", key="perform_actual_lot_number") if show_issue else ""
-
-    if auto_focus and not st.session_state.get("_did_autofocus"):
-        focus_by_label(t("counted_qty"))
-        st.session_state["_did_autofocus"] = True
-
-    def _parse_count(s):
-        s = (s or "").strip()
-        if s == "":
-            return None
-        if not re.fullmatch(r"\d+", s):
-            return "invalid"
-        return int(s)
-
-    def _handle_submit():
-        assignment_id = st.session_state.get("perform_assignment_id","")
-        assignee = st.session_state.get("perform_assignee","")
-        location = st.session_state.get("perform_location","")
-        pallet = st.session_state.get("perform_pallet","")
-        sku = st.session_state.get("perform_sku","")
-        lot = st.session_state.get("perform_lot","")
-        note = st.session_state.get("perform_note","")
-        counted_str = st.session_state.get("perform_counted_str","")
-        counted_val = _parse_count(counted_str)
-        expected_num = st.session_state.get("perform_expected", 0)
-        issue_type_val = st.session_state.get("perform_issue_type","None")
-        actual_pallet_val = st.session_state.get("perform_actual_pallet_id","") if issue_type_val != "None" else ""
-        actual_lot_val = lot_normalize(st.session_state.get("perform_actual_lot_number","")) if issue_type_val != "None" else ""
-
-        if not assignee or not location:
-            st.session_state["_submit_msg"] = ("warn", t("warn_need_fields")); return
-        if counted_val in (None, "invalid"):
-            st.session_state["_submit_msg"] = ("warn", t("warn_count_invalid")); return
-
-        ok, why = validate_lock_for_submit(assignment_id, assignee)
-        if not ok:
-            st.session_state["_submit_msg"] = ("error", str(why)); return
-
-        variance = counted_val - expected_num if expected_num is not None else ""
-        row = {
-            "submission_id": mk_id("CCS"),
-            "assignment_id": assignment_id or "",
-            "assignee": assignee.strip(),
-            "location": location.strip(),
-            "sku": sku.strip(),
-            "lot_number": lot_normalize(lot),
-            "pallet_id": pallet.strip(),
-            "counted_qty": int(counted_val),
-            "expected_qty": int(expected_num) if expected_num is not None else "",
-            "variance": variance if variance != "" else "",
-            "variance_flag": ("Over" if variance > 0 else ("Short" if variance < 0 else "Match")),
-            "timestamp": now_str(),
-            "device_id": "",
-            "note": (note or "").strip(),
-            "issue_type": issue_type_val,
-            "actual_pallet_id": actual_pallet_val,
-            "actual_lot_number": actual_lot_val,
-        }
-        safe_append_csv(PATHS["subs"], row, SUBMIT_COLS)
-
-        dfA2 = load_assignments()
-        if assignment_id and not dfA2.empty:
-            ix = dfA2.index[dfA2["assignment_id"] == assignment_id]
-            if len(ix) > 0:
-                dfA2.loc[ix, "status"] = "Submitted"
-                dfA2.loc[ix, ["lock_owner","lock_start_ts","lock_expires_ts"]] = ["","",""]
-                save_assignments(dfA2)
-
-        # success -> clear form + navigate back to "My Assignments"
-        for k in [
-            "perform_assignment_id","perform_assignee","perform_location","perform_pallet","perform_sku",
-            "perform_lot","perform_expected","perform_counted_str","perform_note",
-            "perform_issue_type","perform_actual_pallet_id","perform_actual_lot_number",
-            "_did_autofocus","_perform_loaded_from"
-        ]:
-            if k in st.session_state:
-                st.session_state.pop(k)
-        st.session_state["current_assignment"] = {}
-        st.session_state["pending_assignment"] = {}
-        st.session_state["_submit_msg"] = ("success", t("submitted_ok"))
-        queue_feedback("success")
-        st.session_state["_navigate_to_tab"] = t("tab_my")
-
-    st.button(t("submit_count"), type="primary", key="perform_submit_btn", use_container_width=True, on_click=_handle_submit)
-
-    msg = st.session_state.pop("_submit_msg", None)
-    if msg:
-        level, text = msg
-        if level == "success":
-            st.success(text)
-            if st.session_state.get("_navigate_to_tab"):
-                switch_to_tab(st.session_state.pop("_navigate_to_tab"))
-            st.rerun()
-        elif level == "warn":
-            st.warning(text)
-        else:
-            st.error(text)
-    emit_feedback()
+     st.markdown(t("selected_summary", id=pending.get('assignment_id',''), loc=pending.get('location',''), status=pending.get('status','')))
+     if st.button(t("submit_assignment"), type="primary", key="my_submit_assignment_btn", use_container_width=True):
+         assign_id = pending.get("assignment_id","")
+         if not me:
+             st.error(t("err_enter_name")); queue_feedback("error")
+         else:
+             dfA2 = load_assignments()
+             row = dfA2[dfA2["assignment_id"]==assign_id]
+             if row.empty:
+                 st.error(t("err_missing")); queue_feedback("error")
+             else:
+                 r = row.iloc[0]
+                 if str(r.get("assignee","")).strip().lower() != str(me).strip().lower():
+                     st.error(t("err_belongs_to", assignee=r.get('assignee','?'))); queue_feedback("error")
+                 elif str(r.get("status","")).strip() == "Submitted":
+                     st.error(t("err_already_submitted")); queue_feedback("error")
+                 elif lock_active(r) and not lock_owned_by(r, me):
+                     st.error(t("err_locked_other", who=r.get('lock_owner','?'), until=r.get('lock_expires_ts','?'))); queue_feedback("error")
+                 else:
+                     ok, msg = start_or_renew_lock(assign_id, me)
+                     if not ok:
+                         st.error(msg); queue_feedback("error")
+                     else:
+                         st.session_state["current_assignment"] = r.to_dict()
+                         st.success(t("lock_success_opening", msg=msg)); queue_feedback("success")
+                         switch_to_tab(t("tab_perform"))
+ else:
+     st.info(t("no_assign"))
+ emit_feedback()
 # ---------------- Dashboard (Live)
 with tabs[3]:
     st.subheader(t("dash_title"))
@@ -1112,6 +952,7 @@ CC_TZ=<IANA TZ, e.g. America/Chicago>""", language="bash")
     st.success(f"Saved mapping and cached {len(norm):,} rows."); st.rerun()
   except Exception as e:
    st.warning(t("excel_err", err=e))
+
 
 
 
