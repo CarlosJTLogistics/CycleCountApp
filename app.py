@@ -768,49 +768,49 @@ actual_lot = st.text_input("Actual LOT Number (if issue)", key="perform_actual_l
 if auto_focus and not st.session_state.get("_did_autofocus"):
   focus_by_label(t("counted_qty")); st.session_state["_did_autofocus"] = True
 
- def _parse_count(s):
-  s = (s or "").strip()
-  if s == "": return None
-  if not re.fullmatch(r"\d+", s): return "invalid"
-  return int(s)
+def _parse_count(s):
+ s = (s or "").strip()
+ if s == "": return None
+ if not re.fullmatch(r"\d+", s): return "invalid"
+ return int(s)
 
- def _handle_submit():
-  assignment_id = st.session_state.get("perform_assignment_id","")
-  assignee = st.session_state.get("perform_assignee","")
-  location = st.session_state.get("perform_location","")
-  pallet = st.session_state.get("perform_pallet","")
-  sku = st.session_state.get("perform_sku","")
-  lot = st.session_state.get("perform_lot","")
-  note = st.session_state.get("perform_note","")
-  counted_str = st.session_state.get("perform_counted_str","")
-  counted_val = _parse_count(counted_str)
-  expected_num = st.session_state.get("perform_expected", 0)
-  if not assignee or not location:
-   st.session_state["_submit_msg"] = ("warn", t("warn_need_fields")); return
-  if counted_val in (None, "invalid"):
-   st.session_state["_submit_msg"] = ("warn", t("warn_count_invalid")); return
-  ok, why = validate_lock_for_submit(assignment_id, assignee)
-  if not ok:
-   st.session_state["_submit_msg"] = ("error", str(why)); return
-  variance = counted_val - expected_num if expected_num is not None else ""
-  row = {
-   "submission_id": mk_id("CCS"),
-   "assignment_id": assignment_id or "",
-   "assignee": assignee.strip(),
-   "location": location.strip(),
-   "sku": sku.strip(),
-   "lot_number": lot_normalize(lot),
-   "pallet_id": pallet.strip(),
-   "counted_qty": int(counted_val),
-   "expected_qty": int(expected_num) if expected_num is not None else "",
-   "variance": variance if variance != "" else "",
-   "variance_flag": ("Over" if variance>0 else ("Short" if variance<0 else "Match")),
-   "timestamp": now_str(),
-   "device_id": "",
-   "note": (note or "").strip(),
- "issue_type": st.session_state.get("perform_issue_type","None"),
- "actual_pallet_id": (st.session_state.get("perform_actual_pallet_id","") if st.session_state.get("perform_issue_type","None")!="None" else ""),
- "actual_lot_number": (lot_normalize(st.session_state.get("perform_actual_lot_number","")) if st.session_state.get("perform_issue_type","None")!="None" else "")
+def _handle_submit():
+ assignment_id = st.session_state.get("perform_assignment_id","")
+ assignee = st.session_state.get("perform_assignee","")
+ location = st.session_state.get("perform_location","")
+ pallet = st.session_state.get("perform_pallet","")
+ sku = st.session_state.get("perform_sku","")
+ lot = st.session_state.get("perform_lot","")
+ note = st.session_state.get("perform_note","")
+ counted_str = st.session_state.get("perform_counted_str","")
+ counted_val = _parse_count(counted_str)
+ expected_num = st.session_state.get("perform_expected", 0)
+ if not assignee or not location:
+  st.session_state["_submit_msg"] = ("warn", t("warn_need_fields")); return
+ if counted_val in (None, "invalid"):
+  st.session_state["_submit_msg"] = ("warn", t("warn_count_invalid")); return
+ ok, why = validate_lock_for_submit(assignment_id, assignee)
+ if not ok:
+  st.session_state["_submit_msg"] = ("error", str(why)); return
+ variance = counted_val - expected_num if expected_num is not None else ""
+ row = {
+  "submission_id": mk_id("CCS"),
+  "assignment_id": assignment_id or "",
+  "assignee": assignee.strip(),
+  "location": location.strip(),
+  "sku": sku.strip(),
+  "lot_number": lot_normalize(lot),
+  "pallet_id": pallet.strip(),
+  "counted_qty": int(counted_val),
+  "expected_qty": int(expected_num) if expected_num is not None else "",
+  "variance": variance if variance != "" else "",
+  "variance_flag": ("Over" if variance>0 else ("Short" if variance<0 else "Match")),
+  "timestamp": now_str(),
+  "device_id": "",
+  "note": (note or "").strip(),
+"issue_type": st.session_state.get("perform_issue_type","None"),
+"actual_pallet_id": (st.session_state.get("perform_actual_pallet_id","") if st.session_state.get("perform_issue_type","None")!="None" else ""),
+"actual_lot_number": (lot_normalize(st.session_state.get("perform_actual_lot_number","")) if st.session_state.get("perform_issue_type","None")!="None" else "")
 }
   safe_append_csv(PATHS["subs"], row, SUBMIT_COLS)
   dfA2 = load_assignments()
@@ -841,7 +841,7 @@ if auto_focus and not st.session_state.get("_did_autofocus"):
    # navigate to My Assignments then rerun
    if st.session_state.get("_navigate_to_tab"):
     switch_to_tab(st.session_state.pop("_navigate_to_tab"))
-   st.rerun()
+        st.rerun()
   elif level=="warn":
    st.warning(text)
   else:
