@@ -1,4 +1,4 @@
-﻿# v1.6.5
+﻿# v1.6.6
 # - TZ fix: use zoneinfo with CC_TZ (default America/Chicago) for all timestamps/locks/IDs
 # - Post-submit UX: clear fields and auto-return to My Assignments on success
 # - Download Submissions Log: buttons on Dashboard and Settings
@@ -220,7 +220,7 @@ except Exception:
  _AGGRID_IMPORTED = False
 
 APP_NAME = "Cycle Counting"
-VERSION = "v1.6.5 (Bulk: per-pallet only; TUN=racks)"
+VERSION = "v1.6.6 (Bulk: per-pallet only; TUN=racks)"
 TZ_NAME = os.getenv("CC_TZ", "America/Chicago")
 TZ_LABEL = TZ_NAME
 LOCK_MINUTES_DEFAULT = 20
@@ -550,7 +550,7 @@ with tabs[0]:
     with c_top1:
         assigned_by = st.text_input(t("assigned_by"), value=st.session_state.get("assigned_by",""), key="assign_assigned_by")
     with c_top2:
-        assignee = st.text_input(t("assign_to"), value=st.session_state.get("assignee",""), key="assign_assignee")
+        assignee = st.selectbox(t("assign_to"), ASSIGN_NAME_OPTIONS, key="assign_to_name"), key="assign_assignee")
 
     inv_df = load_cached_inventory()
     loc_options = []
@@ -1143,6 +1143,7 @@ def get_assign_name(default: str | None = None) -> str | None:
     except Exception:
         return default
     return st.session_state.get('assign_name', default)
+
 
 
 
