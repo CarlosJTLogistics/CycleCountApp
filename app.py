@@ -831,10 +831,8 @@ with tabs[1]:
                          st.error(msg); queue_feedback("error")
                      else:
                          st.session_state["current_assignment"] = r.to_dict()
-st.success(t("lock_success_opening", msg=msg)); queue_feedback("success")
-st.session_state["_navigate_to_tab"] = t("tab_perform")
-switch_to_tab(t("tab_perform"))
-st.rerun()
+                         st.success(t("lock_success_opening", msg=msg)); queue_feedback("success")
+                         switch_to_tab(t("tab_perform"))
  else:
      st.info(t("no_assign"))
  emit_feedback()
@@ -954,6 +952,7 @@ CC_TZ=<IANA TZ, e.g. America/Chicago>""", language="bash")
     st.success(f"Saved mapping and cached {len(norm):,} rows."); st.rerun()
   except Exception as e:
    st.warning(t("excel_err", err=e))
+
 
 
 
