@@ -529,7 +529,7 @@ _ensure_default("auto_advance", True)
 # Header with language selector
 left, right = st.columns([0.7, 0.3])
 with left:
- st.title(f"{t('app_name')} ({VERSION})")
+st.title(f"Cycle Counts ({VERSION})")
 with right:
  sel = st.selectbox(t("lang"), [("en", t("lang_en")), ("es", t("lang_es"))],
                     index=(0 if st.session_state.get("lang","en")=="en" else 1),
@@ -1108,6 +1108,7 @@ CC_TZ=<IANA TZ, e.g. America/Chicago>""", language="bash")
     st.success(f"Saved mapping and cached {len(norm):,} rows."); st.rerun()
   except Exception as e:
    st.warning(t("excel_err", err=e))
+
 
 
 
