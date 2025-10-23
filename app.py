@@ -219,7 +219,7 @@ except Exception:
  _AGGRID_IMPORTED = False
 
 APP_NAME = "Cycle Counting"
-VERSION = "v1.6.7 (Bulk: WHOLE location by default; TUN=racks; optional per-pallet mode)"
+VERSION = "v1.6.8 (Bulk: per-pallet only; TUN=racks)"
 TZ_NAME = os.getenv("CC_TZ", "America/Chicago")
 TZ_LABEL = TZ_NAME
 LOCK_MINUTES_DEFAULT = 20
@@ -567,18 +567,10 @@ with tabs[0]:
             if s not in seen:
                 loc_merge.append(s); seen.add(s)
 
-        # ---- Bulk handling (WHOLE location is default; TUN are racks)
+        # ---- Bulk handling (per-pallet only). TUN are racks.
         with st.expander("Bulk options"):
             st.caption("Rule: Bulk = not 8-digit and not starting with 'TUN' (TUN are racks).")
-            bulk_mode = st.selectbox(
-                "Bulk handling mode",
-                ["Whole location (sum all pallets)", "Per pallet (one assignment per pallet)"],
-                index=0,
-                key="bulk_mode"
-            )
-            pal_filter_txt = ""
-            if st.session_state.get("bulk_mode") == "Per pallet (one assignment per pallet)":
-                pal_filter_txt = st.text_area("Pallet IDs filter (optional: comma/space/newline separated; blank = all in location)", key="bulk_pallets_filter", height=80)
+            pal_filter_txt = st.text_area("Pallet IDs filter (optional: comma/space/newline separated; blank = all in location)", key="bulk_pallets_filter", height=80)
 
         notes = st.text_area(t("notes"), value="", height=80, key="assign_notes")
 
@@ -597,8 +589,7 @@ with tabs[0]:
                 parts = re.split(r"[\s,;]+", str(txt))
                 return set([p.strip() for p in parts if p.strip()])
 
-            pal_filter = parse_pallet_filter(st.session_state.get("bulk_pallets_filter","")) if st.session_state.get("bulk_mode","").startswith("Per pallet") else set()
-            per_pallet = st.session_state.get("bulk_mode","").startswith("Per pallet")
+            pal_filter = parse_pallet_filter(st.session_state.get("bulk_pallets_filter",""))
 
             def _any_lock_active_for(loc, pallet_id=None):
                 if dfA is None or dfA.empty: return False
@@ -616,16 +607,16 @@ with tabs[0]:
                 loc_s = str(loc).strip()
                 is_bulk = is_bulk_location(loc_s)
 
-                # sanity: track if loc exists in cache
+                # Track if location exists in cache
                 if not inv_df.empty:
                     if loc_s not in set(inv_df["location"].astype(str).str.strip().tolist()):
                         not_in_cache.append(loc_s)
 
-                if is_bulk and per_pallet:
-                    # ---- Per-pallet expansion path (optional)
+                if is_bulk:
+                    # ---- Per-pallet expansion (only mode for bulk)
                     cand_inv = inv_df[inv_df["location"].astype(str).str.strip().str.lower() == loc_s.lower()] if (inv_df is not None and not inv_df.empty) else None
                     if cand_inv is None or cand_inv.empty:
-                        # fallback to location-level assignment (no pallets in cache)
+                        # Fallback if cache has no pallets for this location
                         sku = lot_num = pallet = expected = ""
                         row = {
                             "assignment_id": mk_id("CC"),
@@ -639,55 +630,68 @@ with tabs[0]:
                         }
                         safe_append_csv(PATHS["assign"], row, ASSIGN_COLS); created += 1
                         continue
-                    # pallets list (ignore blanks/nan)
+                    # Build clean pallet list (ignore blanks/nan)
                     ps = cand_inv["pallet_id"].astype(str).str.strip()
                     pallets = ps[(ps != "") & (ps.str.lower() != "nan")].unique().tolist()
                     if pal_filter:
                         pallets = [p for p in pallets if p in pal_filter]
                     if not pallets:
-                        # fall back to WHOLE-location
-                        per_pallet = False  # force whole logic below
-                    else:
-                        made = 0
-                        for pal in pallets:
-                            # duplicate/lock check: location+pallet combo
-                            is_dup = False
-                            if dfA is not None and not dfA.empty:
-                                cand = dfA[
-                                    (dfA["location"].astype(str).str.strip().str.lower() == loc_s.lower()) &
-                                    (dfA["status"].isin(["Assigned","In Progress"])) &
-                                    (dfA["pallet_id"].astype(str).str.strip().str.lower() == str(pal).strip().lower())
-                                ]
-                                is_dup = not cand.empty
-                            if is_dup:
-                                dup_conflicts.append(f"{loc_s}:{pal}"); continue
-                            if _any_lock_active_for(loc_s, pal):
-                                locked_conflicts.append(f"{loc_s}:{pal}"); continue
+                        # No pallets resolved after filter -> single placeholder assignment
+                        r0 = cand_inv.iloc[0]
+                        sku = str(r0.get("sku","")); lot_num = lot_normalize(r0.get("lot_number",""))
+                        expected_val = r0.get("expected_qty","")
+                        try: expected = str(int(float(expected_val))) if str(expected_val) != "" else ""
+                        except Exception: expected = str(expected_val) if str(expected_val) != "" else ""
+                        row = {
+                            "assignment_id": mk_id("CC"),
+                            "assigned_by": assigned_by.strip(),
+                            "assignee": assignee.strip(),
+                            "location": loc_s,
+                            "sku": sku, "lot_number": lot_num, "pallet_id": "",
+                            "expected_qty": expected, "priority": "Normal", "status": "Assigned",
+                            "created_ts": now_str(), "due_date": "", "notes": notes.strip(),
+                            "lock_owner": "", "lock_start_ts": "", "lock_expires_ts": ""
+                        }
+                        safe_append_csv(PATHS["assign"], row, ASSIGN_COLS); created += 1
+                        continue
 
-                            rmatch = cand_inv[cand_inv["pallet_id"].astype(str).str.strip().str.lower() == str(pal).strip().lower()].iloc[0]
-                            sku = str(rmatch.get("sku",""))
-                            lot_num = lot_normalize(rmatch.get("lot_number",""))
-                            expected_val = rmatch.get("expected_qty","")
-                            try: expected = str(int(float(expected_val))) if str(expected_val) != "" else ""
-                            except Exception: expected = str(expected_val) if str(expected_val) != "" else ""
-                            row = {
-                                "assignment_id": mk_id("CC"),
-                                "assigned_by": assigned_by.strip(),
-                                "assignee": assignee.strip(),
-                                "location": loc_s,
-                                "sku": sku, "lot_number": lot_num, "pallet_id": str(pal),
-                                "expected_qty": expected, "priority": "Normal", "status": "Assigned",
-                                "created_ts": now_str(), "due_date": "", "notes": notes.strip(),
-                                "lock_owner": "", "lock_start_ts": "", "lock_expires_ts": ""
-                            }
-                            safe_append_csv(PATHS["assign"], row, ASSIGN_COLS); created += 1; made += 1
-                        if made > 0:
-                            bulk_summary.append(f"{loc_s} → {made} pallet assignments")
-                            continue  # done with this location
+                    made = 0
+                    for pal in pallets:
+                        # duplicate/lock check: location+pallet combo
+                        is_dup = False
+                        if dfA is not None and not dfA.empty:
+                            cand = dfA[
+                                (dfA["location"].astype(str).str.strip().str.lower() == loc_s.lower()) &
+                                (dfA["status"].isin(["Assigned","In Progress"])) &
+                                (dfA["pallet_id"].astype(str).str.strip().str.lower() == str(pal).strip().lower())
+                            ]
+                            is_dup = not cand.empty
+                        if is_dup:
+                            dup_conflicts.append(f"{loc_s}:{pal}"); continue
+                        if _any_lock_active_for(loc_s, pal):
+                            locked_conflicts.append(f"{loc_s}:{pal}"); continue
 
-                # ---- WHOLE-location path (default for bulk, and for racks always single)
-                # For racks or when per-pallet not used/available, create one assignment per location.
-                # For bulk WHOLE: Expected QTY = SUM of that location's pallets (numeric); SKU/LOT/PALLET left blank.
+                        rmatch = cand_inv[cand_inv["pallet_id"].astype(str).str.strip().str.lower() == str(pal).strip().lower()].iloc[0]
+                        sku = str(rmatch.get("sku",""))
+                        lot_num = lot_normalize(rmatch.get("lot_number",""))
+                        expected_val = rmatch.get("expected_qty","")
+                        try: expected = str(int(float(expected_val))) if str(expected_val) != "" else ""
+                        except Exception: expected = str(expected_val) if str(expected_val) != "" else ""
+                        row = {
+                            "assignment_id": mk_id("CC"),
+                            "assigned_by": assigned_by.strip(),
+                            "assignee": assignee.strip(),
+                            "location": loc_s,
+                            "sku": sku, "lot_number": lot_num, "pallet_id": str(pal),
+                            "expected_qty": expected, "priority": "Normal", "status": "Assigned",
+                            "created_ts": now_str(), "due_date": "", "notes": notes.strip(),
+                            "lock_owner": "", "lock_start_ts": "", "lock_expires_ts": ""
+                        }
+                        safe_append_csv(PATHS["assign"], row, ASSIGN_COLS); created += 1; made += 1
+                    if made > 0:
+                        bulk_summary.append(f"{loc_s} → {made} pallet assignments")
+                        continue
+                # ---- Racks (8-digit or TUN): single location assignment
                 is_dup = False
                 if dfA is not None and not dfA.empty:
                     cand = dfA[
@@ -700,20 +704,15 @@ with tabs[0]:
                 if _any_lock_active_for(loc_s, None):
                     locked_conflicts.append(loc_s); continue
 
-                sku = lot_num = pallet = ""
-                expected = ""
+                sku = lot_num = pallet = ""; expected = ""
                 try:
                     cand_inv2 = inv_df[inv_df["location"].astype(str).str.strip().str.lower() == loc_s.lower()] if (inv_df is not None and not inv_df.empty) else None
                     if cand_inv2 is not None and not cand_inv2.empty:
-                        # Sum Expected QTY across all rows for this location (coerce to numeric)
-                        numeric = pd.to_numeric(cand_inv2.get("expected_qty",""), errors="coerce").fillna(0)
-                        total = int(numeric.sum()) if len(numeric) else 0
-                        expected = str(total) if total > 0 else ""
-                        # For racks we can optionally carry the first pallet/sku/lot; for bulk WHOLE leave blanks to avoid confusion
-                        if not is_bulk and "pallet_id" in cand_inv2.columns:
-                            # keep first pallet/sku/lot on racks only (optional)
-                            r0 = cand_inv2.iloc[0]
-                            sku = str(r0.get("sku","")); lot_num = lot_normalize(r0.get("lot_number","")); pallet = str(r0.get("pallet_id",""))
+                        r0 = cand_inv2.iloc[0]
+                        sku = str(r0.get("sku","")); lot_num = lot_normalize(r0.get("lot_number","")); pallet = str(r0.get("pallet_id",""))
+                        expected_val = r0.get("expected_qty","")
+                        try: expected = str(int(float(expected_val))) if str(expected_val) != "" else ""
+                        except Exception: expected = str(expected_val) if str(expected_val) != "" else ""
                 except Exception:
                     pass
 
@@ -734,7 +733,7 @@ with tabs[0]:
             if created > 0:
                 st.success(t("created_n", n=created, name=assignee)); queue_feedback("success")
                 if bulk_summary:
-                    st.info("Bulk summary: " + "; ".join(bulk_summary))
+                    st.info("Bulk expanded: " + "; ".join(bulk_summary))
             if dup_conflicts:
                 sample = ", ".join(map(str, dup_conflicts[:10])) + ("…" if len(dup_conflicts)>10 else "")
                 st.warning(t("dup_skipped", n=len(dup_conflicts), sample=sample))
@@ -1109,6 +1108,7 @@ CC_TZ=<IANA TZ, e.g. America/Chicago>""", language="bash")
     st.success(f"Saved mapping and cached {len(norm):,} rows."); st.rerun()
   except Exception as e:
    st.warning(t("excel_err", err=e))
+
 
 
 
