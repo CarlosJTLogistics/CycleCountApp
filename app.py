@@ -827,14 +827,14 @@ with tabs[1]:
                      st.error(t("err_locked_other", who=r.get('lock_owner','?'), until=r.get('lock_expires_ts','?'))); queue_feedback("error")
                  else:
                      ok, msg = start_or_renew_lock(assign_id, me)
-                     if not ok:
-                         st.error(msg); queue_feedback("error")
-                     else:
-                         st.session_state["current_assignment"] = r.to_dict()
-        st.success(t("lock_success_opening", msg=msg)); queue_feedback("success")
-        st.session_state["_navigate_to_tab"] = t("tab_perform")
-        switch_to_tab(t("tab_perform"))
-        st.rerun()
+if not ok:
+    st.error(msg); queue_feedback("error")
+else:
+    st.session_state["current_assignment"] = r.to_dict()
+    st.success(t("lock_success_opening", msg=msg)); queue_feedback("success")
+    st.session_state["_navigate_to_tab"] = t("tab_perform")
+    switch_to_tab(t("tab_perform"))
+    st.rerun()
  else:
      st.info(t("no_assign"))
  emit_feedback()
