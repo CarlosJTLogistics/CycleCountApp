@@ -838,35 +838,44 @@ with tabs[2]:
 
 # ---------------- Dashboard (Live)
 with tabs[3]:
- st.subheader(t("dash_title"))
- subs_path = PATHS["subs"]
- refresh_sec = st.slider(t("auto_refresh_sec"), 2, 30, 5, key="dash_refresh")
- st.caption(f"{t('subs_file')}: {subs_path}")
- dfS = load_submissions()
- # New: download full submissions log
- st.download_button(t("download_subs"), data=(dfS.to_csv(index=False) if not dfS.empty else ",".join(SUBMIT_COLS)+"\n"),
-                    file_name="cyclecount_submissions.csv", mime="text/csv", key="dash_download_subs_btn")
+    st.subheader(t("dash_title"))
+    subs_path = PATHS["subs"]
+    refresh_sec = st.slider(t("auto_refresh_sec"), 2, 30, 5, key="dash_refresh")
+    st.caption(f"{t('subs_file')}: {subs_path}")
 
- dfS_disp = dfS.copy()
-# Compact/mobile view: keep a clear, minimal set of columns (including Notes)
-if st.session_state.get("mobile_mode", True) and not dfS_disp.empty:
-    keep = [c for c in ["timestamp","assignee","location","counted_qty","expected_qty","variance","variance_flag","note"] if c in dfS_disp.columns]
-    if keep:
-        dfS_disp = dfS_disp[keep]
-today_str = now_local().strftime("%m/%d/%Y") now_local().strftime("%m/%d/%Y")
- today_df = dfS[dfS["timestamp"].str.contains(today_str)] if not dfS.empty else dfS
- c1,c2,c3,c4 = st.columns(4)
- c1.metric(t("counts_today"), int(len(today_df)))
- c2.metric(t("over"), int((today_df["variance_flag"]=="Over").sum()) if not today_df.empty else 0)
- c3.metric(t("short"), int((today_df["variance_flag"]=="Short").sum()) if not today_df.empty else 0)
- c4.metric(t("match"), int((today_df["variance_flag"]=="Match").sum()) if not today_df.empty else 0)
- st.write(t("latest_subs"))
- show_table(dfS_disp, height=320, key="grid_submissions", numeric_cols=["variance"])
- last_mod = os.path.getmtime(subs_path) if os.path.exists(subs_path) else 0
- time.sleep(refresh_sec)
- if os.path.exists(subs_path) and os.path.getmtime(subs_path) != last_mod:
-  st.rerun()
+    dfS = load_submissions()
+    # Download full submissions log (CSV)
+    st.download_button(
+        t("download_subs"),
+        data=(dfS.to_csv(index=False) if not dfS.empty else ",".join(SUBMIT_COLS) + "\n"),
+        file_name="cyclecount_submissions.csv",
+        mime="text/csv",
+        key="dash_download_subs_btn"
+    )
 
+    dfS_disp = dfS.copy()
+    # Compact/mobile view keeps a minimal readable set incl. Notes
+    if st.session_state.get("mobile_mode", True) and not dfS_disp.empty:
+        keep = [c for c in ["timestamp","assignee","location","counted_qty","expected_qty","variance","variance_flag","note"] if c in dfS_disp.columns]
+        if keep:
+            dfS_disp = dfS_disp[keep]
+
+    today_str = now_local().strftime("%m/%d/%Y")
+    today_df = dfS[dfS["timestamp"].str.contains(today_str)] if not dfS.empty else dfS
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric(t("counts_today"), int(len(today_df)))
+    c2.metric(t("over"),  int((today_df["variance_flag"]=="Over").sum())  if not today_df.empty else 0)
+    c3.metric(t("short"), int((today_df["variance_flag"]=="Short").sum()) if not today_df.empty else 0)
+    c4.metric(t("match"), int((today_df["variance_flag"]=="Match").sum()) if not today_df.empty else 0)
+
+    st.write(t("latest_subs"))
+    show_table(dfS_disp, height=320, key="grid_submissions", numeric_cols=["variance"])
+
+    last_mod = os.path.getmtime(subs_path) if os.path.exists(subs_path) else 0
+    time.sleep(refresh_sec)
+    if os.path.exists(subs_path) and os.path.getmtime(subs_path) != last_mod:
+        st.rerun()
 # ---------------- Discrepancies
 with tabs[4]:
  st.subheader(t("disc_title"))
@@ -943,6 +952,7 @@ CC_TZ=<IANA TZ, e.g. America/Chicago>""", language="bash")
     st.success(f"Saved mapping and cached {len(norm):,} rows."); st.rerun()
   except Exception as e:
    st.warning(t("excel_err", err=e))
+
 
 
 
