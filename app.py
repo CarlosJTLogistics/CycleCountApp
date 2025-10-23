@@ -529,13 +529,13 @@ _ensure_default("auto_advance", True)
 # Header with language selector
 left, right = st.columns([0.7, 0.3])
 with left:
-st.title(f"Cycle Counts ({VERSION})")
+    st.title(f"{t('app_name')} ({VERSION})")
 with right:
- sel = st.selectbox(t("lang"), [("en", t("lang_en")), ("es", t("lang_es"))],
-                    index=(0 if st.session_state.get("lang","en")=="en" else 1),
-                    format_func=lambda x: x[1], key="lang_select")
- if sel[0] != st.session_state.get("lang","en"):
-  st.session_state["lang"] = sel[0]; st.rerun()
+    sel = st.selectbox(t("lang"), [("en", t("lang_en")), ("es", t("lang_es"))],
+                       index=(0 if st.session_state.get("lang","en")=="en" else 1),
+                       format_func=lambda x: x[1], key="lang_select")
+    if sel[0] != st.session_state.get("lang","en"):
+        st.session_state["lang"] = sel[0]; st.rerun()
 st.caption(t("tip_submit_once"))
 st.caption(f"{t('active_dir')}: {PATHS['root']} · {t('tz')}: {TZ_LABEL} · {t('lock')}: {LOCK_MINUTES} {t('minutes')}")
 
@@ -1108,6 +1108,7 @@ CC_TZ=<IANA TZ, e.g. America/Chicago>""", language="bash")
     st.success(f"Saved mapping and cached {len(norm):,} rows."); st.rerun()
   except Exception as e:
    st.warning(t("excel_err", err=e))
+
 
 
 
