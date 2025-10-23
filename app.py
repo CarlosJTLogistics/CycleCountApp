@@ -1,4 +1,4 @@
-﻿# v1.6.0
+﻿# v1.6.1
 # - TZ fix: use zoneinfo with CC_TZ (default America/Chicago) for all timestamps/locks/IDs
 # - Post-submit UX: clear fields and auto-return to My Assignments on success
 # - Download Submissions Log: buttons on Dashboard and Settings
@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import pandas as pd
 import streamlit as st
+ASSIGN_NAME_OPTIONS = ["Alex","Carlos","Clayton","Cody","Enrique","Erick","James","Jake","Johntai","Karen","Kevin","Luis","Nyahok","Stephanie","Tyteanna"]
 import streamlit.components.v1 as components
 
 # ---------------- I18N ----------------
@@ -219,7 +220,7 @@ except Exception:
  _AGGRID_IMPORTED = False
 
 APP_NAME = "Cycle Counting"
-VERSION = "v1.6.8 (Bulk: per-pallet only; TUN=racks)"
+VERSION = "v1.6.1 (Bulk: per-pallet only; TUN=racks)"
 TZ_NAME = os.getenv("CC_TZ", "America/Chicago")
 TZ_LABEL = TZ_NAME
 LOCK_MINUTES_DEFAULT = 20
@@ -1108,6 +1109,7 @@ CC_TZ=<IANA TZ, e.g. America/Chicago>""", language="bash")
     st.success(f"Saved mapping and cached {len(norm):,} rows."); st.rerun()
   except Exception as e:
    st.warning(t("excel_err", err=e))
+
 
 
 
