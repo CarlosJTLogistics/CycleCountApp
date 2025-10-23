@@ -1,4 +1,4 @@
-# v1.6.1
+﻿# v1.6.1
 # - TZ fix: use zoneinfo with CC_TZ (default America/Chicago) for all timestamps/locks/IDs
 # - Post-submit UX: clear fields and auto-return to My Assignments on success
 # - Download Submissions Log: buttons on Dashboard and Settings
@@ -831,7 +831,7 @@ with tabs[1]:
                          st.error(msg); queue_feedback("error")
                      else:
                          st.session_state["current_assignment"] = r.to_dict()
-                st.success(t("lock_success_opening", msg=msg)); queue_feedback("success")
+st.success(t("lock_success_opening", msg=msg)); queue_feedback("success")
 st.session_state["_navigate_to_tab"] = t("tab_perform")
 switch_to_tab(t("tab_perform"))
 st.rerun()
