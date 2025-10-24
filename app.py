@@ -11,10 +11,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 # ===== Constants / Options =====
-
-    $prefix=$args[0].Groups[1].Value; $body=$args[0].Groups[2].Value; $suffix=$args[0].Groups[3].Value;
     # Split names robustly, remove blanks, trim quotes/spaces
-    $names = $body -split "," | ForEach-Object { # v1.6.4
 # - NEW: Admin Delete Submissions (soft delete with audit trail) under Settings.
 # - Moves selected rows from cyclecount_submissions.csv -> cyclecount_submissions_deleted.csv with deleted_by/ts/reason/note.
 # - Reopens related assignment_id (if any): status=Assigned, clears locks.
@@ -3195,7 +3192,6 @@ CC_TZ=<IANA TZ, e.g. America/Chicago>""", language="bash")
             st.success(t("delete_ok", n=n)); st.rerun()
  -ne "" }
     # Fix Erick->Eric
-    $names = $names | ForEach-Object { if(# v1.6.4
 # - NEW: Admin Delete Submissions (soft delete with audit trail) under Settings.
 # - Moves selected rows from cyclecount_submissions.csv -> cyclecount_submissions_deleted.csv with deleted_by/ts/reason/note.
 # - Reopens related assignment_id (if any): status=Assigned, clears locks.
@@ -5327,7 +5323,6 @@ CC_TZ=<IANA TZ, e.g. America/Chicago>""", language="bash")
     # Add Aldo if missing
     if(-not ($names -contains "Aldo")){ $names += "Aldo" }
     # Preserve original order except the Erick->Eric rename; Aldo appended at end
-    $list = ($names | ForEach-Object { '"' + (# v1.6.4
 # - NEW: Admin Delete Submissions (soft delete with audit trail) under Settings.
 # - Moves selected rows from cyclecount_submissions.csv -> cyclecount_submissions_deleted.csv with deleted_by/ts/reason/note.
 # - Reopens related assignment_id (if any): status=Assigned, clears locks.
