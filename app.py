@@ -880,24 +880,6 @@ with tabs[3]:
     c2.metric(t("over"), int((today_df["variance_flag"]=="Over").sum()) if not today_df.empty else 0)
     c3.metric(t("short"), int((today_df["variance_flag"]=="Short").sum()) if not today_df.empty else 0)
     c4.metric(t("match"), int((today_df["variance_flag"]=="Match").sum()) if not today_df.empty else 0)
-    # --- Trends (today by hour) ---
-    try:
-        import pandas as _pd
-        _dfS = dfS.copy()
-        if not _dfS.empty and "timestamp" in _dfS.columns:
-            _ts = _pd.to_datetime(_dfS["timestamp"], errors="coerce")
-            _dfS["_dt"] = _ts
-            _today = now_local().strftime("%Y-%m-%d")
-            _dfS_today = _dfS[_dfS["_dt"].dt.strftime("%Y-%m-%d")==_today]
-            if not _dfS_today.empty:
-                _dfS_today["_hour"] = _dfS_today["_dt"].dt.strftime("%I %p")
-                _counts_by_hour = _dfS_today.groupby("_hour")["submission_id"].count().reset_index(name="counts")
-                _counts_by_hour = _counts_by_hour.sort_values("_hour")
-                st.markdown("#### Trends (Today)")
-                st.line_chart(_counts_by_hour.set_index("_hour")["counts"])
-    except Exception as _e:
-        st.caption(f"Trends unavailable: {_e}")
-    # --- End surgical add ---
     st.write(t("latest_subs"))
     show_table(dfS_disp, height=320, key="grid_submissions", numeric_cols=["variance"])
     last_mod = os.path.getmtime(subs_path) if os.path.exists(subs_path) else 0
@@ -1949,24 +1931,6 @@ with tabs[3]:
     c2.metric(t("over"), int((today_df["variance_flag"]=="Over").sum()) if not today_df.empty else 0)
     c3.metric(t("short"), int((today_df["variance_flag"]=="Short").sum()) if not today_df.empty else 0)
     c4.metric(t("match"), int((today_df["variance_flag"]=="Match").sum()) if not today_df.empty else 0)
-    # --- Trends (today by hour) ---
-    try:
-        import pandas as _pd
-        _dfS = dfS.copy()
-        if not _dfS.empty and "timestamp" in _dfS.columns:
-            _ts = _pd.to_datetime(_dfS["timestamp"], errors="coerce")
-            _dfS["_dt"] = _ts
-            _today = now_local().strftime("%Y-%m-%d")
-            _dfS_today = _dfS[_dfS["_dt"].dt.strftime("%Y-%m-%d")==_today]
-            if not _dfS_today.empty:
-                _dfS_today["_hour"] = _dfS_today["_dt"].dt.strftime("%I %p")
-                _counts_by_hour = _dfS_today.groupby("_hour")["submission_id"].count().reset_index(name="counts")
-                _counts_by_hour = _counts_by_hour.sort_values("_hour")
-                st.markdown("#### Trends (Today)")
-                st.line_chart(_counts_by_hour.set_index("_hour")["counts"])
-    except Exception as _e:
-        st.caption(f"Trends unavailable: {_e}")
-    # --- End surgical add ---
     st.write(t("latest_subs"))
     show_table(dfS_disp, height=320, key="grid_submissions", numeric_cols=["variance"])
     last_mod = os.path.getmtime(subs_path) if os.path.exists(subs_path) else 0
@@ -3031,24 +2995,6 @@ with tabs[3]:
     c2.metric(t("over"), int((today_df["variance_flag"]=="Over").sum()) if not today_df.empty else 0)
     c3.metric(t("short"), int((today_df["variance_flag"]=="Short").sum()) if not today_df.empty else 0)
     c4.metric(t("match"), int((today_df["variance_flag"]=="Match").sum()) if not today_df.empty else 0)
-    # --- Trends (today by hour) ---
-    try:
-        import pandas as _pd
-        _dfS = dfS.copy()
-        if not _dfS.empty and "timestamp" in _dfS.columns:
-            _ts = _pd.to_datetime(_dfS["timestamp"], errors="coerce")
-            _dfS["_dt"] = _ts
-            _today = now_local().strftime("%Y-%m-%d")
-            _dfS_today = _dfS[_dfS["_dt"].dt.strftime("%Y-%m-%d")==_today]
-            if not _dfS_today.empty:
-                _dfS_today["_hour"] = _dfS_today["_dt"].dt.strftime("%I %p")
-                _counts_by_hour = _dfS_today.groupby("_hour")["submission_id"].count().reset_index(name="counts")
-                _counts_by_hour = _counts_by_hour.sort_values("_hour")
-                st.markdown("#### Trends (Today)")
-                st.line_chart(_counts_by_hour.set_index("_hour")["counts"])
-    except Exception as _e:
-        st.caption(f"Trends unavailable: {_e}")
-    # --- End surgical add ---
     st.write(t("latest_subs"))
     show_table(dfS_disp, height=320, key="grid_submissions", numeric_cols=["variance"])
     last_mod = os.path.getmtime(subs_path) if os.path.exists(subs_path) else 0
@@ -4115,24 +4061,6 @@ with tabs[3]:
     c2.metric(t("over"), int((today_df["variance_flag"]=="Over").sum()) if not today_df.empty else 0)
     c3.metric(t("short"), int((today_df["variance_flag"]=="Short").sum()) if not today_df.empty else 0)
     c4.metric(t("match"), int((today_df["variance_flag"]=="Match").sum()) if not today_df.empty else 0)
-    # --- Trends (today by hour) ---
-    try:
-        import pandas as _pd
-        _dfS = dfS.copy()
-        if not _dfS.empty and "timestamp" in _dfS.columns:
-            _ts = _pd.to_datetime(_dfS["timestamp"], errors="coerce")
-            _dfS["_dt"] = _ts
-            _today = now_local().strftime("%Y-%m-%d")
-            _dfS_today = _dfS[_dfS["_dt"].dt.strftime("%Y-%m-%d")==_today]
-            if not _dfS_today.empty:
-                _dfS_today["_hour"] = _dfS_today["_dt"].dt.strftime("%I %p")
-                _counts_by_hour = _dfS_today.groupby("_hour")["submission_id"].count().reset_index(name="counts")
-                _counts_by_hour = _counts_by_hour.sort_values("_hour")
-                st.markdown("#### Trends (Today)")
-                st.line_chart(_counts_by_hour.set_index("_hour")["counts"])
-    except Exception as _e:
-        st.caption(f"Trends unavailable: {_e}")
-    # --- End surgical add ---
     st.write(t("latest_subs"))
     show_table(dfS_disp, height=320, key="grid_submissions", numeric_cols=["variance"])
     last_mod = os.path.getmtime(subs_path) if os.path.exists(subs_path) else 0
@@ -5197,24 +5125,6 @@ with tabs[3]:
     c2.metric(t("over"), int((today_df["variance_flag"]=="Over").sum()) if not today_df.empty else 0)
     c3.metric(t("short"), int((today_df["variance_flag"]=="Short").sum()) if not today_df.empty else 0)
     c4.metric(t("match"), int((today_df["variance_flag"]=="Match").sum()) if not today_df.empty else 0)
-    # --- Trends (today by hour) ---
-    try:
-        import pandas as _pd
-        _dfS = dfS.copy()
-        if not _dfS.empty and "timestamp" in _dfS.columns:
-            _ts = _pd.to_datetime(_dfS["timestamp"], errors="coerce")
-            _dfS["_dt"] = _ts
-            _today = now_local().strftime("%Y-%m-%d")
-            _dfS_today = _dfS[_dfS["_dt"].dt.strftime("%Y-%m-%d")==_today]
-            if not _dfS_today.empty:
-                _dfS_today["_hour"] = _dfS_today["_dt"].dt.strftime("%I %p")
-                _counts_by_hour = _dfS_today.groupby("_hour")["submission_id"].count().reset_index(name="counts")
-                _counts_by_hour = _counts_by_hour.sort_values("_hour")
-                st.markdown("#### Trends (Today)")
-                st.line_chart(_counts_by_hour.set_index("_hour")["counts"])
-    except Exception as _e:
-        st.caption(f"Trends unavailable: {_e}")
-    # --- End surgical add ---
     st.write(t("latest_subs"))
     show_table(dfS_disp, height=320, key="grid_submissions", numeric_cols=["variance"])
     last_mod = os.path.getmtime(subs_path) if os.path.exists(subs_path) else 0
@@ -6283,24 +6193,6 @@ with tabs[3]:
     c2.metric(t("over"), int((today_df["variance_flag"]=="Over").sum()) if not today_df.empty else 0)
     c3.metric(t("short"), int((today_df["variance_flag"]=="Short").sum()) if not today_df.empty else 0)
     c4.metric(t("match"), int((today_df["variance_flag"]=="Match").sum()) if not today_df.empty else 0)
-    # --- Trends (today by hour) ---
-    try:
-        import pandas as _pd
-        _dfS = dfS.copy()
-        if not _dfS.empty and "timestamp" in _dfS.columns:
-            _ts = _pd.to_datetime(_dfS["timestamp"], errors="coerce")
-            _dfS["_dt"] = _ts
-            _today = now_local().strftime("%Y-%m-%d")
-            _dfS_today = _dfS[_dfS["_dt"].dt.strftime("%Y-%m-%d")==_today]
-            if not _dfS_today.empty:
-                _dfS_today["_hour"] = _dfS_today["_dt"].dt.strftime("%I %p")
-                _counts_by_hour = _dfS_today.groupby("_hour")["submission_id"].count().reset_index(name="counts")
-                _counts_by_hour = _counts_by_hour.sort_values("_hour")
-                st.markdown("#### Trends (Today)")
-                st.line_chart(_counts_by_hour.set_index("_hour")["counts"])
-    except Exception as _e:
-        st.caption(f"Trends unavailable: {_e}")
-    # --- End surgical add ---
     st.write(t("latest_subs"))
     show_table(dfS_disp, height=320, key="grid_submissions", numeric_cols=["variance"])
     last_mod = os.path.getmtime(subs_path) if os.path.exists(subs_path) else 0
@@ -7354,24 +7246,6 @@ with tabs[3]:
     c2.metric(t("over"), int((today_df["variance_flag"]=="Over").sum()) if not today_df.empty else 0)
     c3.metric(t("short"), int((today_df["variance_flag"]=="Short").sum()) if not today_df.empty else 0)
     c4.metric(t("match"), int((today_df["variance_flag"]=="Match").sum()) if not today_df.empty else 0)
-    # --- Trends (today by hour) ---
-    try:
-        import pandas as _pd
-        _dfS = dfS.copy()
-        if not _dfS.empty and "timestamp" in _dfS.columns:
-            _ts = _pd.to_datetime(_dfS["timestamp"], errors="coerce")
-            _dfS["_dt"] = _ts
-            _today = now_local().strftime("%Y-%m-%d")
-            _dfS_today = _dfS[_dfS["_dt"].dt.strftime("%Y-%m-%d")==_today]
-            if not _dfS_today.empty:
-                _dfS_today["_hour"] = _dfS_today["_dt"].dt.strftime("%I %p")
-                _counts_by_hour = _dfS_today.groupby("_hour")["submission_id"].count().reset_index(name="counts")
-                _counts_by_hour = _counts_by_hour.sort_values("_hour")
-                st.markdown("#### Trends (Today)")
-                st.line_chart(_counts_by_hour.set_index("_hour")["counts"])
-    except Exception as _e:
-        st.caption(f"Trends unavailable: {_e}")
-    # --- End surgical add ---
     st.write(t("latest_subs"))
     show_table(dfS_disp, height=320, key="grid_submissions", numeric_cols=["variance"])
     last_mod = os.path.getmtime(subs_path) if os.path.exists(subs_path) else 0
