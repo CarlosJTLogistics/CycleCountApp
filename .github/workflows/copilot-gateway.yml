@@ -22,29 +22,32 @@ permissions:
 jobs:
   apply:
     runs-on: windows-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repo (full history)
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Set up Python
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Configure Git identity
+        shell: bash
         run: |
           git config user.email "${{ github.event.inputs.commit_email }}"
           git config user.name "${{ github.event.inputs.commit_name }}"
-        shell: bash
 
       - name: Execute Copilot script (PowerShell; multi-line safe)
         shell: pwsh
+        env:
+          PS_SCRIPT: ${{ github.event.inputs.ps_script }}
         run: |
           $ErrorActionPreference = "Stop"
           $tmp = Join-Path $env:TEMP ("copilot-script-{0}.ps1" -f ([guid]::NewGuid()))
-@"
-${{ github.event.inputs.ps_script }}
-"@ | Set-Content -Encoding UTF8 $tmp
+          [IO.File]::WriteAllText($tmp, $env:PS_SCRIPT, [Text.Encoding]::UTF8)
+          Write-Host "==> Running script: $tmp"
           & $tmp
+          Write-Host "==> Script finished"
