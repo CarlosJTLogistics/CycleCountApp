@@ -11,7 +11,6 @@ import streamlit.components.v1 as components
 # ===== Constants / Options =====
 ASSIGN_NAME_OPTIONS = ["Aldo","Alex","Carlos","Clayton","Cody","Enrique","Eric","James","Jake","Johntai","Karen","Kevin","Luis","Nyahok","Stephanie","Tyteanna"]
    
-]
 current_map = ASSIGN_NAME_OPTIONS  # mirror list, no chained assignment
             if st.button(t("save_map"), type="primary", key="map_save_btn"):
                 norm = normalize_inventory_df(raw, current_map)
