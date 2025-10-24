@@ -16,7 +16,7 @@ if st.button(t("save_map"), type="primary", key="map_save_btn"):
                 norm = normalize_inventory_df(raw, current_map)
                 save_inventory_cache(norm); save_inventory_mapping(current_map)
                 st.success(f"Saved mapping and cached {len(norm):,} rows."); st.rerun()
-        except Exception as e:
+except Exception as e:
             st.warning(t("excel_err", err=e))
 
 
