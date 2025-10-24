@@ -3,9 +3,10 @@ name: Copilot Gateway (Surgical Updates)
 on:
   workflow_dispatch:
     inputs:
-      ps_one_liner:
-        description: "PowerShell one-liner to apply (SafeReplace / backups / AST-check / push)"
+      ps_script:
+        description: "PowerShell script to apply (SafeReplace / backups / AST-check / push); multi-line allowed"
         required: true
+        type: string
       commit_email:
         description: "Git commit email for the bot"
         required: false
@@ -21,12 +22,17 @@ permissions:
 jobs:
   apply:
     runs-on: windows-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
-      - name: Checkout repo (main)
+      - name: Checkout repo (full history)
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
       - name: Configure Git identity
         run: |
@@ -34,10 +40,15 @@ jobs:
           git config user.name  "${{ github.event.inputs.commit_name }}"
         shell: bash
 
-      - name: Execute Copilot one-liner (PowerShell)
+      - name: Execute Copilot script (PowerShell; multi-line safe)
         run: |
           $ErrorActionPreference = "Stop"
-          $cmd = '${{ github.event.inputs.ps_one_liner }}'
-          Write-Host "Executing one-liner..."
-          Invoke-Expression $cmd
+          Write-Host "==> Writing input script to temp file"
+          $tmp = Join-Path $env:TEMP ("copilot-script-{0}.ps1" -f ([guid]::NewGuid()))
+          @"
+${{ github.event.inputs.ps_script }}
+"@ | Set-Content -Encoding UTF8 $tmp
+          Write-Host "==> Running script: $tmp"
+          & $tmp
+          Write-Host "==> Script finished"
         shell: pwsh
