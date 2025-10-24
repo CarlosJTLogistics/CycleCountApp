@@ -37,10 +37,11 @@ jobs:
       - name: Configure Git identity
         run: |
           git config user.email "${{ github.event.inputs.commit_email }}"
-          git config user.name  "${{ github.event.inputs.commit_name }}"
+          git config user.name "${{ github.event.inputs.commit_name }}"
         shell: bash
 
       - name: Execute Copilot script (PowerShell; multi-line safe)
+        shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           Write-Host "==> Writing input script to temp file"
@@ -51,4 +52,3 @@ ${{ github.event.inputs.ps_script }}
           Write-Host "==> Running script: $tmp"
           & $tmp
           Write-Host "==> Script finished"
-        shell: pwsh
