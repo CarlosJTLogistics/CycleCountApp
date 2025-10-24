@@ -4,17 +4,17 @@ on:
   workflow_dispatch:
     inputs:
       ps_script:
-        description: "PowerShell script to apply (SafeReplace / backups / AST-check / push); multi-line allowed"
+        description: PowerShell script to apply (SafeReplace / backups / AST-check / push); multi-line allowed
         required: true
         type: string
       commit_email:
-        description: "Git commit email for the bot"
+        description: Git commit email for the bot
         required: false
-        default: "copilot-bot@users.noreply.github.com"
+        default: copilot-bot@users.noreply.github.com
       commit_name:
-        description: "Git commit name for the bot"
+        description: Git commit name for the bot
         required: false
-        default: "Copilot Bot"
+        default: Copilot Bot
 
 permissions:
   contents: write
@@ -24,15 +24,14 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout repo (full history)
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
       - name: Configure Git identity
         run: |
@@ -44,11 +43,8 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          Write-Host "==> Writing input script to temp file"
           $tmp = Join-Path $env:TEMP ("copilot-script-{0}.ps1" -f ([guid]::NewGuid()))
-          @"
+@"
 ${{ github.event.inputs.ps_script }}
 "@ | Set-Content -Encoding UTF8 $tmp
-          Write-Host "==> Running script: $tmp"
           & $tmp
-          Write-Host "==> Script finished"
