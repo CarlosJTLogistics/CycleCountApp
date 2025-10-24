@@ -1,7 +1,8 @@
-﻿# v1.6.3
-# - Assign Counts: added "Paste LOT Numbers (optional)" (CustomerLotReference) and LOT-based assignment
-# - Preserves all rules: 20-min lock, Central time CC_TZ, per-pallet only for bulk, TUN=racks, sound/vibration ON, bilingual, post-submit UX, dashboard downloads, Issue Type + Actual Pallet/LOT
-# - 'Assign to (name)' now a fixed dropdown (ASSIGN_NAME_OPTIONS)
+﻿# v1.6.4
+# - NEW: Admin Delete Submissions (soft delete with audit trail) under Settings.
+# - Moves selected rows from cyclecount_submissions.csv -> cyclecount_submissions_deleted.csv with deleted_by/ts/reason/note.
+# - Reopens related assignment_id (if any): status=Assigned, clears locks.
+# - Preserves all existing rules, UX, bilingual UI, sound/vibration defaults, per-pallet bulk, TUN=racks.
 import os, time, uuid, re, json
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -12,7 +13,7 @@ import streamlit.components.v1 as components
 # ===== Constants / Options =====
 ASSIGN_NAME_OPTIONS = ["Alex","Carlos","Clayton","Cody","Enrique","Erick","James","Jake","Johntai","Karen","Kevin","Luis","Nyahok","Stephanie","Tyteanna"]
 APP_NAME = "Cycle Counting"
-VERSION = "v1.6.3 (Bulk: per-pallet only; TUN=racks; LOT paste assign)"
+VERSION = "v1.6.4 (Delete Submissions + LOT assign; Bulk per-pallet; TUN=racks)"
 TZ_NAME = os.getenv("CC_TZ", "America/Chicago")
 LOCK_MINUTES_DEFAULT = 20
 LOCK_MINUTES = int(os.getenv("CC_LOCK_MINUTES", LOCK_MINUTES_DEFAULT))
@@ -59,7 +60,12 @@ I18N = {
   "active_paths":"Active paths:","inv_upload_title":"Inventory Excel — Upload & Map","inv_cache_loaded":"Inventory cache loaded: {n} rows",
   "preview_first10":"Preview (first 10 rows):","column_mapping":"Column Mapping","map_loc":"Location","map_sku":"SKU","map_lot":"LOT Number",
   "map_pal":"Pallet ID","map_qty":"Expected QTY","save_map":"Save Mapping & Cache Inventory","excel_err":"Excel load/mapping error: {err}",
-  "no_data":"No data","download_subs":"Download Submissions Log"
+  "no_data":"No data","download_subs":"Download Submissions Log",
+  "admin_delete_title":"Admin: Delete Submissions","admin_delete_instructions":"Select one or more submissions to delete. This is a SAFE delete: rows move to cyclecount_submissions_deleted.csv with audit details.",
+  "deleted_by":"Deleted by (name)","delete_reason":"Reason","delete_note":"Note (optional)","confirm_delete":"I confirm I want to delete the selected submissions",
+  "delete_btn":"Delete Selected","delete_ok":"Deleted {n} submission(s).","delete_need_select":"Select at least one submission.",
+  "delete_need_meta":"Enter Deleted by and Reason, and check the confirmation.",
+  "preview_filter":"Quick filter (optional)","filter_today":"Today only","filter_by_assignee":"Assignee contains","filter_by_location":"Location contains"
  },
  "es":{
   "tab_assign":"Asignar Conteos","tab_my":"Mis Asignaciones","tab_perform":"Realizar Conteo",
@@ -80,7 +86,7 @@ I18N = {
   "submit_assignment":"Enviar Asignación (Abrir Realizar Conteo)","err_enter_name":"Ingresa tu nombre arriba para continuar.",
   "err_missing":"La asignación ya no existe.","err_belongs_to":"Esta asignación pertenece a {assignee}.",
   "err_already_submitted":"Esta asignación ya fue Enviada.","err_locked_other":"Bloqueada por {who} hasta {until}",
-  "lock_success_opening":"{msg} — Abriendo Realizar Conteo…","tip_submit_once":"Tip: Haz clic en una asignación y luego en 'Enviar Asignación' para abrir Realizar Conteo.",
+  "lock_success_opening":"{msg} — Abriendo Realizar Conteo…","tip_submit_once":"Tip: Haz clic en una asignación y luego en 'Enviar Realizar Conteo'.",
   "perform_title":"Realizar Conteo","auto_focus_loc":"Autoenfocar Ubicación","auto_advance":"Avanzar automáticamente después del escaneo",
   "assignment_id":"ID de Asignación","assignee":"Asignado a","scan_location":"Escanear Ubicación","scan_pallet":"Escanear ID de Tarima (opcional)",
   "sku":"SKU (opcional)","lot":"Número de Lote (opcional)","expected_qty":"Cantidad Esperada (de Asignación/Inventario)","counted_qty":"Cantidad Contada",
@@ -94,7 +100,12 @@ I18N = {
   "active_paths":"Rutas activas:","inv_upload_title":"Inventario Excel — Cargar y Mapear","inv_cache_loaded":"Inventario cargado: {n} filas",
   "preview_first10":"Vista previa (primeras 10 filas):","column_mapping":"Mapeo de Columnas","map_loc":"Ubicación","map_sku":"SKU",
   "map_lot":"Número de Lote","map_pal":"ID de Tarima","map_qty":"Cantidad Esperada","save_map":"Guardar Mapeo y Cachear Inventario",
-  "excel_err":"Error al cargar/mapear Excel: {err}","no_data":"Sin datos","download_subs":"Descargar Registro de Envíos"
+  "excel_err":"Error al cargar/mapear Excel: {err}","no_data":"Sin datos","download_subs":"Descargar Registro de Envíos",
+  "admin_delete_title":"Admin: Borrar Envíos","admin_delete_instructions":"Selecciona uno o más envíos para borrar. Es un borrado SEGURO: mueve filas a cyclecount_submissions_deleted.csv con auditoría.",
+  "deleted_by":"Borrado por (nombre)","delete_reason":"Motivo","delete_note":"Nota (opcional)","confirm_delete":"Confirmo que deseo borrar los envíos seleccionados",
+  "delete_btn":"Borrar Seleccionados","delete_ok":"Se borraron {n} envío(s).","delete_need_select":"Selecciona al menos un envío.",
+  "delete_need_meta":"Ingresa Borrado por y Motivo, y marca la confirmación.",
+  "preview_filter":"Filtro rápido (opcional)","filter_today":"Solo hoy","filter_by_assignee":"Asignado a contiene","filter_by_location":"Ubicación contiene"
  },
 }
 
@@ -118,7 +129,6 @@ try:
 except Exception:
     _AGGRID_IMPORTED = False
 AGGRID_ENABLED = (os.getenv("AGGRID_ENABLED","1")=="1") and _AGGRID_IMPORTED
-
 # Paths
 def ensure_dirs(paths): [os.makedirs(p, exist_ok=True) for p in paths]
 def get_paths():
@@ -131,6 +141,7 @@ def get_paths():
         "assign":os.path.join(active,"counts_assignments.csv"),
         "assign_deleted":os.path.join(active,"counts_assignments_deleted.csv"),
         "subs":os.path.join(active,"cyclecount_submissions.csv"),
+        "subs_deleted":os.path.join(active,"cyclecount_submissions_deleted.csv"),
         "inv_csv":os.path.join(active,"inventory_lookup.csv"),
         "inv_map":os.path.join(active,"inventory_mapping.json"),
     }
@@ -297,7 +308,7 @@ def validate_lock_for_submit(assignment_id:str, user:str)->(bool,str):
     if lock_owned_by(r,user): return True, "Lock valid for user"
     return False, f"Locked by {r.get('lock_owner','?')} until {r.get('lock_expires_ts','?')}"
 
-# Focus & feedback
+# Focus/feedback helpers
 def focus_by_label(label_text:str):
     if not label_text: return
     components.html(f"""
@@ -396,7 +407,6 @@ with tabs[0]:
     with c_top1:
         assigned_by = st.text_input(t("assigned_by"), key="assign_assigned_by")
     with c_top2:
-        # fixed dropdown for assignee
         prev = st.session_state.get("assignee", ASSIGN_NAME_OPTIONS[0])
         try: idx = ASSIGN_NAME_OPTIONS.index(prev)
         except ValueError: idx = 0
@@ -503,7 +513,6 @@ with tabs[0]:
                 if pal_filter: pallets = [p for p in pallets if p in pal_filter]
 
                 if not pallets:
-                    # no pallets after filter -> single placeholder using first row
                     r0 = cand_inv.iloc[0]
                     def _norm_int(v):
                         try: return str(int(float(v))) if str(v)!="" else ""
@@ -559,6 +568,7 @@ with tabs[0]:
                     safe_append_csv(PATHS["assign"], row, ASSIGN_COLS); created+=1; made+=1
                 if made>0: bulk_summary.append(f"{loc_s} → {made} pallet assignments")
                 continue
+
             # Racks (8-digit or TUN): single assignment per location
             is_dup=False
             if dfA is not None and not dfA.empty:
@@ -744,7 +754,7 @@ with tabs[2]:
     counted_str = st.text_input(t("counted_qty"), key="perform_counted_str")
     note = st.text_input(t("note"), key="perform_note")
 
-    # Issue capture (keep from v1.6.2)
+    # Issue capture
     issue_opts = ["None","Wrong Pallet ID","Wrong LOT Number","Location Empty","Damaged Pallet","Other"]
     issue_type = st.selectbox("Issue Type (optional)", issue_opts, index=0, key="perform_issue_type")
     show_issue = st.session_state.get("perform_issue_type","None")!="None"
@@ -935,3 +945,120 @@ CC_TZ=<IANA TZ, e.g. America/Chicago>""", language="bash")
                 st.success(f"Saved mapping and cached {len(norm):,} rows."); st.rerun()
         except Exception as e:
             st.warning(t("excel_err", err=e))
+
+    # -----------------------
+    # Admin: Delete Submissions (soft delete with audit)
+    # -----------------------
+    st.divider()
+    st.markdown(f"### {t('admin_delete_title')}")
+    st.caption(t("admin_delete_instructions"))
+
+    dfS_all = load_submissions()
+    # Quick filters
+    f1,f2,f3 = st.columns([0.25,0.35,0.40])
+    with f1:
+        only_today = st.checkbox(t("filter_today"), value=True, key="del_today")
+    with f2:
+        filt_assignee = st.text_input(t("filter_by_assignee"), key="del_f_assignee")
+    with f3:
+        filt_location = st.text_input(t("filter_by_location"), key="del_f_location")
+
+    df_view = dfS_all.copy()
+    if not df_view.empty:
+        if only_today:
+            today_str = now_local().strftime("%m/%d/%Y")
+            df_view = df_view[df_view["timestamp"].astype(str).str.contains(today_str, na=False)]
+        if filt_assignee:
+            df_view = df_view[df_view["assignee"].astype(str).str.contains(filt_assignee, case=False, na=False)]
+        if filt_location:
+            df_view = df_view[df_view["location"].astype(str).str.contains(filt_location, case=False, na=False)]
+
+    selected_ids = []
+    if not df_view.empty:
+        if AGGRID_ENABLED:
+            grid = show_table(df_view, height=320, key="grid_delete_subs", selectable=True, selection_mode="multiple", numeric_cols=["variance"])
+            rows = grid.get("selected_rows", [])
+            # st_aggrid returns list[dict] already with row values
+            if isinstance(rows, list) and len(rows)>0:
+                # be robust: dicts may be inside DataFrames; coerce
+                try:
+                    selected_ids = [ (r["submission_id"] if isinstance(r,dict) else r.get("submission_id","")) for r in rows ]
+                except Exception:
+                    selected_ids = []
+        else:
+            st.write(t("preview_filter"))
+            opts = df_view["submission_id"].astype(str).tolist()
+            selected_ids = st.multiselect("submission_id", options=opts, default=[], key="delete_ids_multiselect")
+    else:
+        st.info(t("no_data"))
+
+    dcol1,dcol2,dcol3 = st.columns([0.33,0.33,0.34])
+    with dcol1:
+        deleted_by = st.text_input(t("deleted_by"), key="delete_by_name", value=st.session_state.get("me_name",""))
+    with dcol2:
+        reasons = ["Wrong Scan","Training/Test","Duplicate Entry","Bad Assignment Context","Other"]
+        reason = st.selectbox(t("delete_reason"), reasons, index=0, key="delete_reason_sel")
+    with dcol3:
+        note = st.text_input(t("delete_note"), key="delete_reason_note")
+
+    confirm = st.checkbox(t("confirm_delete"), key="delete_confirm")
+    def _soft_delete():
+        dfS = load_submissions()
+        if dfS.empty: return 0
+        ids = set([sid for sid in selected_ids if str(sid).strip()!=""])
+        if not ids: return -1
+        if not deleted_by or not reason or not confirm: return -2
+        # rows to move
+        to_del = dfS[dfS["submission_id"].astype(str).isin(ids)]
+        if to_del.empty: return 0
+        # append audit columns
+        del_df = to_del.copy()
+        del_df["deleted_by"] = (deleted_by or "").strip()
+        del_df["deleted_ts"] = now_str()
+        del_df["delete_reason"] = reason
+        del_df["delete_note"] = (note or "").strip()
+
+        # write/move: append to subs_deleted
+        dest = PATHS["subs_deleted"]
+        if os.path.exists(dest):
+            # align columns union
+            existing = read_csv_locked(dest)
+            missing_cols = [c for c in del_df.columns if c not in existing.columns]
+            for c in missing_cols: existing[c]=""
+            missing_cols2 = [c for c in existing.columns if c not in del_df.columns]
+            for c in missing_cols2: del_df[c]=""
+            # reorder to existing
+            cols = list(existing.columns)
+            try:
+                dataframe_to_csv_utf8(existing, dest)  # keep existing structure
+            except Exception:
+                pass
+            with open(dest, "a", encoding="utf-8") as f:
+                del_df[cols].to_csv(f, header=False, index=False)
+        else:
+            dataframe_to_csv_utf8(del_df, dest)
+
+        # remove from main submissions
+        remaining = dfS[~dfS["submission_id"].astype(str).isin(ids)]
+        dataframe_to_csv_utf8(remaining, PATHS["subs"])
+
+        # attempt to reopen assignments for those submission assignment_ids
+        assign_ids = [x for x in to_del["assignment_id"].astype(str).tolist() if str(x).strip()!=""]
+        if assign_ids:
+            dfA = load_assignments()
+            if not dfA.empty:
+                mask = dfA["assignment_id"].astype(str).isin(assign_ids)
+                if mask.any():
+                    dfA.loc[mask, "status"] = "Assigned"
+                    dfA.loc[mask, ["lock_owner","lock_start_ts","lock_expires_ts"]] = ["","",""]
+                    save_assignments(dfA)
+        return len(to_del)
+
+    if st.button(t("delete_btn"), type="secondary", key="delete_btn_submit", use_container_width=True):
+        n = _soft_delete()
+        if n == -1:
+            st.warning(t("delete_need_select"))
+        elif n == -2:
+            st.warning(t("delete_need_meta"))
+        else:
+            st.success(t("delete_ok", n=n)); st.rerun()
