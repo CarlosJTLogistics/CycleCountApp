@@ -1,0 +1,36 @@
+﻿name: Copilot Gateway (Surgical Updates)
+on:
+  workflow_dispatch:
+    inputs:
+      ps_one_liner:
+        description: "PowerShell one-liner to apply (SafeReplace / backups / AST-check / push)"
+        required: true
+      commit_email:
+        description: "Git commit email for the bot"
+        required: false
+        default: "copilot-bot@users.noreply.github.com"
+      commit_name:
+        description: "Git commit name for the bot"
+        required: false
+        default: "Copilot Bot"
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Configure Git identity
+        run: |
+          git config user.email "${{ github.event.inputs.commit_email }}"
+          git config user.name  "${{ github.event.inputs.commit_name }}"
+        shell: bash
+      - name: Execute Copilot one-liner (PowerShell)
+        run: |
+          $ErrorActionPreference = "Stop"
+          $cmd = '${{ github.event.inputs.ps_one_liner }}'
+          Invoke-Expression $cmd
+        shell: pwsh
