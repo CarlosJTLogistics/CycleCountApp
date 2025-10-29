@@ -1,1 +1,0 @@
-st.warning(t("excel_err", err=e))
