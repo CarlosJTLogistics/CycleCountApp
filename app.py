@@ -58,7 +58,7 @@ I18N = {
   "active_paths":"Active paths:","inv_upload_title":"Inventory Excel — Upload & Map","inv_cache_loaded":"Inventory cache loaded: {n} rows",
   "preview_first10":"Preview (first 10 rows):","column_mapping":"Column Mapping","map_loc":"Location","map_sku":"SKU","map_lot":"LOT Number",
   "map_pal":"Pallet ID","map_qty":"Expected QTY","save_map":"Save Mapping & Cache Inventory","excel_err":"Excel load/mapping error: {err}",
-  "no_data":"No data","download_subs":"Download Submissions Log", "delete_mode":"Delete mode","delete_selected":"Delete selected","delete_confirm":"Confirm delete (moves to recycle log)","deleted_n":"Deleted {n} submission(s).","no_selection":"No rows selected."
+  "no_data":"No data","download_subs":"Download Submissions Log", "batch_mode":"Select multiple (batch)","start_selected":"Start Selected","selected_n":"Selected: {n}", "delete_mode":"Delete mode","delete_selected":"Delete selected","delete_confirm":"Confirm delete (moves to recycle log)","deleted_n":"Deleted {n} submission(s).","no_selection":"No rows selected."
  },
  "es":{
   "tab_assign":"Asignar Conteos","tab_my":"Mis Asignaciones","tab_perform":"Realizar Conteo",
@@ -93,7 +93,7 @@ I18N = {
   "active_paths":"Rutas activas:","inv_upload_title":"Inventario Excel — Cargar y Mapear","inv_cache_loaded":"Inventario cargado: {n} filas",
   "preview_first10":"Vista previa (primeras 10 filas):","column_mapping":"Mapeo de Columnas","map_loc":"Ubicación","map_sku":"SKU",
   "map_lot":"Número de Lote","map_pal":"ID de Tarima","map_qty":"Cantidad Esperada","save_map":"Guardar Mapeo y Cachear Inventario",
-  "excel_err":"Error al cargar/mapear Excel: {err}","no_data":"Sin datos","download_subs":"Descargar Registro de Envíos", "delete_mode":"Modo eliminar","delete_selected":"Eliminar seleccionados","delete_confirm":"Confirmar eliminación (mover al registro de reciclaje)","deleted_n":"Se eliminaron {n} envío(s).","no_selection":"No hay filas seleccionadas."
+  "excel_err":"Error al cargar/mapear Excel: {err}","no_data":"Sin datos","download_subs":"Descargar Registro de Envíos", "batch_mode":"Seleccion múltiple (lote)","start_selected":"Iniciar seleccionados","selected_n":"Seleccionados: {n}", "delete_mode":"Modo eliminar","delete_selected":"Eliminar seleccionados","delete_confirm":"Confirmar eliminación (mover al registro de reciclaje)","deleted_n":"Se eliminaron {n} envío(s).","no_selection":"No hay filas seleccionadas."
  },
 }
 
@@ -648,6 +648,65 @@ with tabs[1]:
     cC.metric(t("submitted"), int((mine["status"]=="Submitted").sum()))
     cD.metric(t("total"), int(len(mine)))
     st.write(t("your_assign"))
+# ---- Batch selection (optional) ----
+batch_mode = st.checkbox(t("batch_mode"), key="my_batch_mode")
+if batch_mode:
+    selected_ids = []
+    if not mine.empty:
+        if AGGRID_ENABLED:
+            # Use a separate grid key and multi-select
+            def _lock_info2b(r):
+                if lock_active(r):
+                    who=r.get("lock_owner","?"); until=r.get("lock_expires_ts","")
+                    you = "You" if st.session_state.get("lang","en")=="en" else "Tú"
+                    who_disp = you if (who or "").lower()==(me or "").lower() else who
+                    return t("locked_by_until", who=who_disp, until=until)
+                return t("available")
+            mine_disp2 = mine.copy()
+            mine_disp2["lock_info"] = mine_disp2.apply(_lock_info2b, axis=1)
+            res_b = show_table(mine_disp2, height=280, key="grid_my_assign_batch", selectable=True, selection_mode="multiple")
+            sel_b = res_b.get("selected_rows", [])
+            if isinstance(sel_b, pd.DataFrame):
+                selB = sel_b.to_dict(orient="records")
+            elif isinstance(sel_b, list):
+                selB = sel_b
+            else:
+                try: selB = list(sel_b)
+                except Exception: selB = []
+            for r in selB:
+                sid = r.get("assignment_id","")
+                if sid: selected_ids.append(sid)
+        else:
+            # Fallback list when AgGrid is unavailable
+            opts2=[]
+            for _,r in mine.iterrows():
+                label=f"{r.get('assignment_id','')} — {r.get('location','')} — {r.get('status','')}"
+                opts2.append((label, r.get("assignment_id","")))
+            def _fmt2(val):
+                for lbl,v in opts2:
+                    if v==val: return lbl
+                return val
+            ids_multi = st.multiselect(t("your_assign"), [v for _,v in opts2], format_func=_fmt2, key="my_assign_multi")
+            if ids_multi:
+                selected_ids = ids_multi
+    cB1, cB2 = st.columns([0.5,0.5])
+    with cB1:
+        st.caption(t("selected_n", n=len(selected_ids)))
+    with cB2:
+        if st.button(t("start_selected"), type="primary", key="my_start_selected_btn", use_container_width=True, disabled=(len(selected_ids)==0)):
+            st.session_state["batch_queue"] = list(selected_ids)
+            # Start the first one right away
+            next_id = st.session_state["batch_queue"].pop(0)
+            dfA2 = load_assignments()
+            row2 = dfA2[dfA2["assignment_id"]==next_id]
+            if not row2.empty:
+                r2 = row2.iloc[0]
+                me_name = st.session_state.get("me_name","") or r2.get("assignee","")
+                ok2,msg2 = start_or_renew_lock(next_id, me_name)
+                if ok2:
+                    st.session_state["current_assignment"] = r2.to_dict()
+                    switch_to_tab(t("tab_perform"))
+                    queue_feedback("success")
     selected_dict=None
     if not mine.empty:
         if AGGRID_ENABLED:
@@ -831,7 +890,24 @@ with tabs[2]:
         st.session_state["pending_assignment"]={}
         st.session_state["_submit_msg"]=("success", t("submitted_ok"))
         queue_feedback("success")
+        # If there is a batch queue, auto-load the next assignment; otherwise return to My Assignments
+_next_q = st.session_state.get("batch_queue", [])
+if _next_q:
+    _next_id = _next_q.pop(0)
+    dfA3 = load_assignments()
+    _row3 = dfA3[dfA3["assignment_id"]==_next_id]
+    if not _row3.empty:
+        _r3 = _row3.iloc[0]
+        _ok3, _msg3 = start_or_renew_lock(_next_id, assignee or st.session_state.get("me_name",""))
+        if _ok3:
+            st.session_state["current_assignment"] = _r3.to_dict()
+            st.session_state["_navigate_to_tab"]=t("tab_perform")
+        else:
+            st.session_state["_navigate_to_tab"]=t("tab_my")
+    else:
         st.session_state["_navigate_to_tab"]=t("tab_my")
+else:
+    st.session_state["_navigate_to_tab"]=t("tab_my")
 
     st.button(t("submit_count"), type="primary", key="perform_submit_btn", use_container_width=True, on_click=_handle_submit)
     msg = st.session_state.pop("_submit_msg", None)
