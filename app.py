@@ -678,6 +678,24 @@ if batch_mode and not mine.empty:
             if ok2:
                 st.session_state["current_assignment"] = r2.to_dict()
                 switch_to_tab(t("tab_perform")); queue_feedback("success"); st.rerun()
+# ---- Batch (My Assignments only) ----
+==0)):
+        # Deduplicate while preserving order
+        seen=set(); q=[]
+        for sid in selected_ids:
+            if sid and sid not in seen:
+                seen.add(sid); q.append(sid)
+        st.session_state["batch_queue"] = q
+        next_id = st.session_state["batch_queue"].pop(0)
+        dfA2 = load_assignments()
+        row2 = dfA2[dfA2["assignment_id"]==next_id]
+        if not row2.empty:
+            r2 = row2.iloc[0]
+            me_name = st.session_state.get("me_name","") or r2.get("assignee","")
+            ok2,msg2 = start_or_renew_lock(next_id, me_name)
+            if ok2:
+                st.session_state["current_assignment"] = r2.to_dict()
+                switch_to_tab(t("tab_perform")); queue_feedback("success"); st.rerun()
 selected_dict=None
     if not mine.empty:
         if AGGRID_ENABLED:
@@ -919,7 +937,7 @@ with tabs[3]:
     delete_mode = st.checkbox(t("delete_mode"), key="dash_delete_mode")
 if delete_mode and not dfS.empty:
     df_view = dfS.copy()
-    res_tbl = show_table(df_view, height=320, key="grid_submissions_del", selectable=True, selection_mode="multiple", numeric_cols=["variance"])
+    res_tbl = show_table(df_view, height=320, key="grid_submissions_del", selectable=True, , numeric_cols=["variance"])
 else:
     df_view = dfS_disp
     res_tbl = show_table(df_view, height=320, key="grid_submissions", numeric_cols=["variance"])
@@ -960,7 +978,7 @@ with tabs[4]:
     st.write(t("exceptions")); delete_mode2 = st.checkbox(t("delete_mode"), key="disc_delete_mode")
 if delete_mode2 and not ex.empty:
     df_view2 = ex.copy()
-    res2 = show_table(df_view2, height=300, key="grid_exceptions_del", selectable=True, selection_mode="multiple", numeric_cols=["variance"])
+    res2 = show_table(df_view2, height=300, key="grid_exceptions_del", selectable=True, , numeric_cols=["variance"])
 else:
     df_view2 = ex_disp
     res2 = show_table(df_view2, height=300, key="grid_exceptions", numeric_cols=["variance"])
