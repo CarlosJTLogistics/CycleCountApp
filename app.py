@@ -302,7 +302,7 @@ def start_or_renew_lock(assignment_id:str, user:str):
     return True, f"Locked by {user} until {exp.strftime('%I:%M %p')}"
 
 def validate_lock_for_submit(assignment_id:str, user:str)->(bool,str):
-    if not assignment_id: return True, "Ad-hoc submission"
+    if not assignment_id: return False, "Assignment required"
     df=load_assignments()
     row=df[df["assignment_id"]==assignment_id]
     if row.empty: return True, "Assignment not found; proceeding"
@@ -648,10 +648,8 @@ with tabs[1]:
     cC.metric(t("submitted"), int((mine["status"]=="Submitted").sum()))
     cD.metric(t("total"), int(len(mine)))
     st.write(t("your_assign"))
-# ---- Batch selection (optional) ----
-# ---- Batch selection (simple UI inside My Assignments only) ----
+# ---- Batch (My Assignments only) ----
 batch_mode = st.checkbox(t("batch_mode"), key="my_batch_mode")
-selected_ids = []
 if batch_mode and not mine.empty:
     opts2=[]
     for _,r in mine.iterrows():
@@ -664,7 +662,12 @@ if batch_mode and not mine.empty:
     selected_ids = st.multiselect(t("your_assign"), [v for _,v in opts2], format_func=_fmt2, key="my_assign_multi_simple")
     st.caption(t("selected_n", n=len(selected_ids)))
     if st.button(t("start_selected"), type="primary", key="my_start_selected_btn", use_container_width=True, disabled=(len(selected_ids)==0)):
-        st.session_state["batch_queue"] = list(selected_ids)
+        # Deduplicate while preserving order
+        seen=set(); q=[]
+        for sid in selected_ids:
+            if sid and sid not in seen:
+                seen.add(sid); q.append(sid)
+        st.session_state["batch_queue"] = q
         next_id = st.session_state["batch_queue"].pop(0)
         dfA2 = load_assignments()
         row2 = dfA2[dfA2["assignment_id"]==next_id]
@@ -674,9 +677,8 @@ if batch_mode and not mine.empty:
             ok2,msg2 = start_or_renew_lock(next_id, me_name)
             if ok2:
                 st.session_state["current_assignment"] = r2.to_dict()
-                switch_to_tab(t("tab_perform"))
-                queue_feedback("success"); st.rerun()
-    selected_dict=None
+                switch_to_tab(t("tab_perform")); queue_feedback("success"); st.rerun()
+selected_dict=None
     if not mine.empty:
         if AGGRID_ENABLED:
             def _lock_info2(r):
@@ -1033,7 +1035,7 @@ CC_TZ=<IANA TZ, e.g. America/Chicago>""", language="bash")
             with c2: sku_col = st.selectbox(t("map_sku"), ["<none>"]+cols, index=idx_for(base_map.get("sku","")), key="map_sku")
             with c3: lot_col = st.selectbox(t("map_lot"), ["<none>"]+cols, index=idx_for(base_map.get("lot_number","")), key="map_lot")
             with c4: pal_col = st.selectbox(t("map_pal"), ["<none>"]+cols, index=idx_for(base_map.get("pallet_id","")), key="map_pal")
-            with c5: qty_col = st.selectbox(t("map_qty"), ["<none>"]+cols, index=idx_for(base_map.get("expected_qty","")), key="map_qty")
+            with c5: qty_col = st.selectbox(t("map_qty"), ["<none>"]+cols, index=idx_for(base_map.get("expected_qty","Qty" if "Qty" in cols else "")), key="map_qty")
             current_map = {
                 "location": (st.session_state.get("map_loc") if st.session_state.get("map_loc") and st.session_state.get("map_loc")!="<none>" else ""),
                 "sku": (st.session_state.get("map_sku") if st.session_state.get("map_sku") and st.session_state.get("map_sku")!="<none>" else ""),
