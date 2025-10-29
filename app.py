@@ -661,7 +661,7 @@ if batch_mode and not mine.empty:
         return val
     selected_ids = st.multiselect(t("your_assign"), [v for _,v in opts2], format_func=_fmt2, key="my_assign_multi_simple")
     st.caption(t("selected_n", n=len(selected_ids)))
-    if st.button(t("start_selected"), type="primary", key="my_start_selected_btn", use_container_width=True, disabled=(len(selected_ids)==0)):
+    if st.button(t("start_selected"), type="primary", key="my_start_selected_btn", use_container_width=True, disabled=(len(selected_ids)==0 or not conf)):
         # Deduplicate while preserving order
         seen=set(); q=[]
         for sid in selected_ids:
@@ -679,7 +679,7 @@ if batch_mode and not mine.empty:
                 st.session_state["current_assignment"] = r2.to_dict()
                 switch_to_tab(t("tab_perform")); queue_feedback("success"); st.rerun()
 # ---- Batch (My Assignments only) ----
-==0)):
+==0):
         # Deduplicate while preserving order
         seen=set(); q=[]
         for sid in selected_ids:
