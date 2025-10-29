@@ -679,7 +679,6 @@ if batch_mode and not mine.empty:
                 st.session_state["current_assignment"] = r2.to_dict()
                 switch_to_tab(t("tab_perform")); queue_feedback("success"); st.rerun()
 # ---- Batch (My Assignments only) ----
-==0):
         # Deduplicate while preserving order
         seen=set(); q=[]
         for sid in selected_ids:
