@@ -58,7 +58,7 @@ I18N = {
   "active_paths":"Active paths:","inv_upload_title":"Inventory Excel — Upload & Map","inv_cache_loaded":"Inventory cache loaded: {n} rows",
   "preview_first10":"Preview (first 10 rows):","column_mapping":"Column Mapping","map_loc":"Location","map_sku":"SKU","map_lot":"LOT Number",
   "map_pal":"Pallet ID","map_qty":"Expected QTY","save_map":"Save Mapping & Cache Inventory","excel_err":"Excel load/mapping error: {err}",
-  "no_data":"No data","download_subs":"Download Submissions Log"
+  "no_data":"No data","download_subs":"Download Submissions Log", "delete_mode":"Delete mode","delete_selected":"Delete selected","delete_confirm":"Confirm delete (moves to recycle log)","deleted_n":"Deleted {n} submission(s).","no_selection":"No rows selected."
  },
  "es":{
   "tab_assign":"Asignar Conteos","tab_my":"Mis Asignaciones","tab_perform":"Realizar Conteo",
@@ -93,7 +93,7 @@ I18N = {
   "active_paths":"Rutas activas:","inv_upload_title":"Inventario Excel — Cargar y Mapear","inv_cache_loaded":"Inventario cargado: {n} filas",
   "preview_first10":"Vista previa (primeras 10 filas):","column_mapping":"Mapeo de Columnas","map_loc":"Ubicación","map_sku":"SKU",
   "map_lot":"Número de Lote","map_pal":"ID de Tarima","map_qty":"Cantidad Esperada","save_map":"Guardar Mapeo y Cachear Inventario",
-  "excel_err":"Error al cargar/mapear Excel: {err}","no_data":"Sin datos","download_subs":"Descargar Registro de Envíos"
+  "excel_err":"Error al cargar/mapear Excel: {err}","no_data":"Sin datos","download_subs":"Descargar Registro de Envíos", "delete_mode":"Modo eliminar","delete_selected":"Eliminar seleccionados","delete_confirm":"Confirmar eliminación (mover al registro de reciclaje)","deleted_n":"Se eliminaron {n} envío(s).","no_selection":"No hay filas seleccionadas."
  },
 }
 
@@ -130,6 +130,7 @@ def get_paths():
         "assign":os.path.join(active,"counts_assignments.csv"),
         "assign_deleted":os.path.join(active,"counts_assignments_deleted.csv"),
         "subs":os.path.join(active,"cyclecount_submissions.csv"),
+ "subs_deleted":os.path.join(active,"cyclecount_submissions_deleted.csv"),
         "inv_csv":os.path.join(active,"inventory_lookup.csv"),
         "inv_map":os.path.join(active,"inventory_mapping.json"),
     }
@@ -201,6 +202,20 @@ def save_assignments(df:pd.DataFrame):
     dataframe_to_csv_utf8(df[ASSIGN_COLS], PATHS["assign"])
 
 def load_submissions(): return read_csv_locked(PATHS["subs"], SUBMIT_COLS)
+
+def delete_submissions(ids:list)->int:
+    if not ids: return 0
+    df = load_submissions()
+    if df is None or df.empty or "submission_id" not in df.columns: return 0
+    sel = df[df["submission_id"].isin(ids)]
+    if sel.empty: return 0
+    # append to recycle log
+    for _, r in sel.iterrows():
+        safe_append_csv(PATHS["subs_deleted"], r.to_dict(), SUBMIT_COLS)
+    # write remaining back
+    remain = df[~df["submission_id"].isin(ids)]
+    dataframe_to_csv_utf8(remain, PATHS["subs"])
+    return int(len(sel))
 
 def load_cached_inventory()->pd.DataFrame:
     if "inv_df" in st.session_state: return st.session_state["inv_df"]
@@ -854,7 +869,34 @@ with tabs[3]:
     c3.metric(t("short"), int((today_df["variance_flag"]=="Short").sum()) if not today_df.empty else 0)
     c4.metric(t("match"), int((today_df["variance_flag"]=="Match").sum()) if not today_df.empty else 0)
     st.write(t("latest_subs"))
-    show_table(dfS_disp, height=320, key="grid_submissions", numeric_cols=["variance"])
+    delete_mode = st.checkbox(t("delete_mode"), key="dash_delete_mode")
+if delete_mode and not dfS.empty:
+    df_view = dfS.copy()
+    res_tbl = show_table(df_view, height=320, key="grid_submissions_del", selectable=True, selection_mode="multiple", numeric_cols=["variance"])
+else:
+    df_view = dfS_disp
+    res_tbl = show_table(df_view, height=320, key="grid_submissions", numeric_cols=["variance"])
+selected_ids = []
+if st.session_state.get("dash_delete_mode", False):
+    sel_rows = res_tbl.get("selected_rows", [])
+    if isinstance(sel_rows, pd.DataFrame):
+        sel = sel_rows.to_dict(orient="records")
+    elif isinstance(sel_rows, list):
+        sel = sel_rows
+    else:
+        try: sel = list(sel_rows)
+        except Exception: sel = []
+    for r in sel:
+        sid = r.get("submission_id","")
+        if sid:
+            selected_ids.append(sid)
+    conf = st.checkbox(t("delete_confirm"), key="dash_delete_confirm")
+    if st.button(t("delete_selected"), type="secondary", disabled=(len(selected_ids)==0 or not conf), key="dash_delete_btn", use_container_width=True):
+        n = delete_submissions(selected_ids)
+        if n>0:
+            st.success(t("deleted_n", n=n)); st.rerun()
+        else:
+            st.info(t("no_selection"))
     last_mod = os.path.getmtime(subs_path) if os.path.exists(subs_path) else 0
     time.sleep(refresh_sec)
     if os.path.exists(subs_path) and os.path.getmtime(subs_path)!=last_mod: st.rerun()
@@ -868,7 +910,34 @@ with tabs[4]:
     if st.session_state.get("mobile_mode", True) and not ex_disp.empty:
         keep=[c for c in ["timestamp","assignee","location","counted_qty","expected_qty","variance","variance_flag","note","issue_type","actual_pallet_id","actual_lot_number"] if c in ex_disp.columns]
         if keep: ex_disp=ex_disp[keep]
-    st.write(t("exceptions")); show_table(ex_disp, height=300, key="grid_exceptions", numeric_cols=["variance"])
+    st.write(t("exceptions")); delete_mode2 = st.checkbox(t("delete_mode"), key="disc_delete_mode")
+if delete_mode2 and not ex.empty:
+    df_view2 = ex.copy()
+    res2 = show_table(df_view2, height=300, key="grid_exceptions_del", selectable=True, selection_mode="multiple", numeric_cols=["variance"])
+else:
+    df_view2 = ex_disp
+    res2 = show_table(df_view2, height=300, key="grid_exceptions", numeric_cols=["variance"])
+selected_ids2 = []
+if st.session_state.get("disc_delete_mode", False):
+    sel_rows2 = res2.get("selected_rows", [])
+    if isinstance(sel_rows2, pd.DataFrame):
+        sel2 = sel_rows2.to_dict(orient="records")
+    elif isinstance(sel_rows2, list):
+        sel2 = sel_rows2
+    else:
+        try: sel2 = list(sel_rows2)
+        except Exception: sel2 = []
+    for r in sel2:
+        sid = r.get("submission_id","")
+        if sid:
+            selected_ids2.append(sid)
+    conf2 = st.checkbox(t("delete_confirm"), key="disc_delete_confirm")
+    if st.button(t("delete_selected"), type="secondary", disabled=(len(selected_ids2)==0 or not conf2), key="disc_delete_btn", use_container_width=True):
+        n2 = delete_submissions(selected_ids2)
+        if n2>0:
+            st.success(t("deleted_n", n=n2)); st.rerun()
+        else:
+            st.info(t("no_selection"))
     st.download_button(t("export_ex"), data=ex.to_csv(index=False), file_name="cyclecount_exceptions.csv", mime="text/csv", key="disc_export_btn")
 
 # ===== Settings =====
