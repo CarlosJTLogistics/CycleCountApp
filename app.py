@@ -649,64 +649,33 @@ with tabs[1]:
     cD.metric(t("total"), int(len(mine)))
     st.write(t("your_assign"))
 # ---- Batch selection (optional) ----
+# ---- Batch selection (simple UI inside My Assignments only) ----
 batch_mode = st.checkbox(t("batch_mode"), key="my_batch_mode")
-if batch_mode:
-    selected_ids = []
-    if not mine.empty:
-        if AGGRID_ENABLED:
-            # Use a separate grid key and multi-select
-            def _lock_info2b(r):
-                if lock_active(r):
-                    who=r.get("lock_owner","?"); until=r.get("lock_expires_ts","")
-                    you = "You" if st.session_state.get("lang","en")=="en" else "Tú"
-                    who_disp = you if (who or "").lower()==(me or "").lower() else who
-                    return t("locked_by_until", who=who_disp, until=until)
-                return t("available")
-            mine_disp2 = mine.copy()
-            mine_disp2["lock_info"] = mine_disp2.apply(_lock_info2b, axis=1)
-            res_b = show_table(mine_disp2, height=280, key="grid_my_assign_batch", selectable=True, selection_mode="multiple")
-            sel_b = res_b.get("selected_rows", [])
-            if isinstance(sel_b, pd.DataFrame):
-                selB = sel_b.to_dict(orient="records")
-            elif isinstance(sel_b, list):
-                selB = sel_b
-            else:
-                try: selB = list(sel_b)
-                except Exception: selB = []
-            for r in selB:
-                sid = r.get("assignment_id","")
-                if sid: selected_ids.append(sid)
-        else:
-            # Fallback list when AgGrid is unavailable
-            opts2=[]
-            for _,r in mine.iterrows():
-                label=f"{r.get('assignment_id','')} — {r.get('location','')} — {r.get('status','')}"
-                opts2.append((label, r.get("assignment_id","")))
-            def _fmt2(val):
-                for lbl,v in opts2:
-                    if v==val: return lbl
-                return val
-            ids_multi = st.multiselect(t("your_assign"), [v for _,v in opts2], format_func=_fmt2, key="my_assign_multi")
-            if ids_multi:
-                selected_ids = ids_multi
-    cB1, cB2 = st.columns([0.5,0.5])
-    with cB1:
-        st.caption(t("selected_n", n=len(selected_ids)))
-    with cB2:
-        if st.button(t("start_selected"), type="primary", key="my_start_selected_btn", use_container_width=True, disabled=(len(selected_ids)==0)):
-            st.session_state["batch_queue"] = list(selected_ids)
-            # Start the first one right away
-            next_id = st.session_state["batch_queue"].pop(0)
-            dfA2 = load_assignments()
-            row2 = dfA2[dfA2["assignment_id"]==next_id]
-            if not row2.empty:
-                r2 = row2.iloc[0]
-                me_name = st.session_state.get("me_name","") or r2.get("assignee","")
-                ok2,msg2 = start_or_renew_lock(next_id, me_name)
-                if ok2:
-                    st.session_state["current_assignment"] = r2.to_dict()
-                    switch_to_tab(t("tab_perform"))
-                    queue_feedback("success")
+selected_ids = []
+if batch_mode and not mine.empty:
+    opts2=[]
+    for _,r in mine.iterrows():
+        label=f"{r.get('assignment_id','')} — {r.get('location','')} — {r.get('status','')}"
+        opts2.append((label, r.get("assignment_id","")))
+    def _fmt2(val):
+        for lbl,v in opts2:
+            if v==val: return lbl
+        return val
+    selected_ids = st.multiselect(t("your_assign"), [v for _,v in opts2], format_func=_fmt2, key="my_assign_multi_simple")
+    st.caption(t("selected_n", n=len(selected_ids)))
+    if st.button(t("start_selected"), type="primary", key="my_start_selected_btn", use_container_width=True, disabled=(len(selected_ids)==0)):
+        st.session_state["batch_queue"] = list(selected_ids)
+        next_id = st.session_state["batch_queue"].pop(0)
+        dfA2 = load_assignments()
+        row2 = dfA2[dfA2["assignment_id"]==next_id]
+        if not row2.empty:
+            r2 = row2.iloc[0]
+            me_name = st.session_state.get("me_name","") or r2.get("assignee","")
+            ok2,msg2 = start_or_renew_lock(next_id, me_name)
+            if ok2:
+                st.session_state["current_assignment"] = r2.to_dict()
+                switch_to_tab(t("tab_perform"))
+                queue_feedback("success"); st.rerun()
     selected_dict=None
     if not mine.empty:
         if AGGRID_ENABLED:
