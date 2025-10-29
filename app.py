@@ -639,7 +639,7 @@ with tabs[0]:
 # ===== My Assignments =====
 with tabs[1]:
     st.subheader(t("my_title"))
-    me = st.text_input(t("i_am"), key="me_name", value=st.session_state.get("assignee",""))
+    me = st.text_input(t("i_am"), key="me_name")
     dfA = load_assignments()
     mine = (dfA[(dfA["assignee"].str.lower()==(me or "").lower()) & (dfA["status"]!="Submitted")]) if me else dfA.iloc[0:0]
     cA, cB, cC, cD = st.columns(4)
